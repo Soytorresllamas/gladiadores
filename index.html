@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gladiadores — Duelo de Coliseo</title>
+<style>
+  :root { --bg:#1a1206; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: radial-gradient(circle at 50% 30%, #2a1d0a, #0c0803);
+    font-family: "Courier New", monospace;
+    color: #f4e4c1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    user-select: none;
+  }
+  h1 {
+    margin: 8px 0 4px;
+    font-size: clamp(18px, 3vw, 28px);
+    letter-spacing: 4px;
+    color: #e8c66a;
+    text-shadow: 2px 2px 0 #5a3a0a;
+  }
+  #wrap { text-align: center; }
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    width: min(96vw, 960px);
+    height: auto;
+    border: 4px solid #6b4a17;
+    border-radius: 6px;
+    box-shadow: 0 0 0 4px #2a1d0a, 0 12px 40px rgba(0,0,0,.6);
+    background: #6c8cb0;
+  }
+  #help {
+    margin: 10px auto 16px;
+    font-size: 12.5px; line-height: 1.7;
+    color: #c9b48a; max-width: 920px;
+  }
+  #help b { color: #e8c66a; }
+  .k { display:inline-block; background:#3a2a10; border:1px solid #6b4a17; border-radius:4px;
+       padding:1px 6px; margin:0 1px; color:#f4e4c1; font-weight:bold; }
+  #sig { margin: 2px auto 18px; font-size: 12px; color: #8a734a; letter-spacing: 1px; }
+  #sig b { color: #e8c66a; }
+</style>
+</head>
+<body>
+  <div id="wrap">
+    <h1>⚔ GLADIADORES ⚔</h1>
+    <canvas id="game" width="480" height="270"></canvas>
+    <div id="help">
+      <b>ROJO (izq):</b> <span class="k">A</span><span class="k">D</span> mover ·
+      <span class="k">W</span> espadazo · <span class="k">S</span> escudo ·
+      <span class="k">Q</span> tirar escudo · <span class="k">E</span> parry
+      &nbsp;&nbsp;|&nbsp;&nbsp;
+      <b>AZUL (der):</b> <span class="k">J</span><span class="k">L</span> mover ·
+      <span class="k">I</span> espadazo · <span class="k">K</span> escudo ·
+      <span class="k">O</span> tirar escudo · <span class="k">U</span> parry
+      <br>Gana el primero en conectar <b>3 espadazos</b>. Tirar el escudo = golpe seguro pero te quedas sin defensa.
+      El <b>parry</b> justo a tiempo regresa el golpe. 3 fallos seguidos te dejan lento; 2 aciertos agrandan tu espada.
+    </div>
+    <div id="sig">Diseñado, ideado y en parte programado por <b>8-bits</b></div>
+  </div>
+
+<script>
+(() => {
+  "use strict";
+  const cv = document.getElementById('game');
+  const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  const W = cv.width, H = cv.height;
+
+  // ---------- Audio ----------
+  const SND = {};
+  ['swing','hit','block','victory'].forEach(n => {
+    const a = new Audio('sonidos/' + n + '.mp3'); a.preload = 'auto'; SND[n] = a;
+  });
+  const ambient = new Audio('sonidos/ambient.mp3');
+  ambient.loop = true; ambient.volume = 0.22; ambient.preload = 'auto';
+  let audioUnlocked = false;
+  function unlockAudio() { if (audioUnlocked) return; audioUnlocked = true; ambient.play().catch(()=>{}); }
+  function sfx(name, vol = 0.7) {
+    try { const a = SND[name].cloneNode(true); a.volume = vol; a.play().catch(()=>{}); } catch (e) {}
+  }
+
+  // ---------- Constantes ----------
+  const GROUND_Y = 206;     // línea de pies de los gladiadores
+  const FW = 20;            // ancho de cuerpo
+  const WALK = 1.7;
+  const SLOW = 0.72;
+  const X_MIN = 38, X_MAX = 442;
+  const MIN_GAP = FW + 6;
+  const REACH_BASE = 36;
+  const ATTACK_DUR = 18;    // frames de animación
+  const STRIKE_AT = 5;      // resuelve cuando el chop llega abajo
+  const COOLDOWN = 10;
+  const SLOW_MS = 3000;
+  const WIN_HITS = 3;
+  const MISS_LIMIT = 3;
+  const PARRY_WINDOW = 12;  // frames activos de parry
+  const PARRY_CD = 26;      // recuperación tras parry
+  const THROW_SPEED = 6;    // px/frame del escudo lanzado
+
+  function makeFighter(o) {
+    return {
+      name:o.name, pal:o.pal, x:o.x, dir:o.dir, controls:o.controls,
+      hits:0, misses:0, swordLvl:1,
+      hasShield:true, shielding:false,
+      attack:0, resolved:false, cooldown:0,
+      parry:0, parryCd:0,
+      slowUntil:0, flash:0, knock:0, msg:'', msgT:0
+    };
+  }
+
+  const PAL_RED  = { main:'#b5341f', dark:'#7a1f12', skin:'#e0a878', metal:'#c9cdd6', metalD:'#8a8f9c', plume:'#e23b2a' };
+  const PAL_BLUE = { main:'#2f63b8', dark:'#1c3c75', skin:'#e0a878', metal:'#c9cdd6', metalD:'#8a8f9c', plume:'#37a0e2' };
+
+  let p1, p2, state, winner, shakeT = 0, projectiles = [];
+  let eggUntil = 0, eggCount = 0, eggLast = 0;   // easter egg (tecla 8 x3)
+
+  function reset() {
+    p1 = makeFighter({ name:'ROJO', pal:PAL_RED,  x:150, dir:+1,
+      controls:{left:'a', right:'d', attack:'w', shield:'s', thrw:'q', parry:'e'} });
+    p2 = makeFighter({ name:'AZUL', pal:PAL_BLUE, x:330, dir:-1,
+      controls:{left:'j', right:'l', attack:'i', shield:'k', thrw:'o', parry:'u'} });
+    projectiles = [];
+    state = 'ready'; winner = null;
+  }
+
+  // ---------- Perritos NPC ----------
+  const DOG_MSG = {
+    red:  { cheer:['¡Vamos Rojo!','¡Tú puedes!','¡Dale fuerte!','¡Guau guau!','¡Escudo arriba!','¡Ánimo campeón!','¡No te rindas!'],
+            win:['¡GANAMOS!','¡Campeón Rojo!','¡Guau guau guau!'] },
+    blue: { cheer:['¡Vamos Azul!','¡Aguanta!','¡Atácalo ya!','¡Guau!','¡Por la gloria!','¡Tú puedes!','¡Ese es mío!'],
+            win:['¡GANAMOS!','¡Campeón Azul!','¡Guau guau guau!'] }
+  };
+  function makeDog(x, dir, pal, msgs) {
+    return { x, dir, pal, msgs, msg:'', msgUntil:0, nextAt: performance.now() + 1500 + Math.random()*2500 };
+  }
+  let dogL, dogR;
+  function initDogs() {
+    dogL = makeDog(50,  +1, PAL_RED,  DOG_MSG.red);
+    dogR = makeDog(430, -1, PAL_BLUE, DOG_MSG.blue);
+  }
+  function dogCheer(fighter, kind) {
+    const d = (fighter === p1) ? dogL : dogR;
+    const pool = (kind === 'win') ? d.msgs.win : d.msgs.cheer;
+    d.msg = pool[(Math.random()*pool.length)|0];
+    const t = performance.now();
+    d.msgUntil = t + 2600;
+    d.nextAt = t + 4000 + Math.random()*3500;
+  }
+  function updateDog(d) {
+    const t = performance.now();
+    if (t > d.nextAt && t > d.msgUntil) {
+      d.msg = d.msgs.cheer[(Math.random()*d.msgs.cheer.length)|0];
+      d.msgUntil = t + 2400;
+      d.nextAt = t + 4500 + Math.random()*4000;
+    }
+  }
+
+  reset();
+  initDogs();
+
+  // ---------- Entrada ----------
+  const down = new Set();
+  const GAME_KEYS = new Set(['a','d','w','s','q','e','j','l','i','k','o','u',' ','enter']);
+  addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (GAME_KEYS.has(k)) e.preventDefault();
+    unlockAudio();
+    if (e.repeat) return;
+    // easter egg: aprieta "8" tres veces
+    if (k === '8') {
+      const now = performance.now();
+      eggCount = (now - eggLast < 1300) ? eggCount + 1 : 1;
+      eggLast = now;
+      if (eggCount >= 3) { eggUntil = now + 3200; eggCount = 0; }
+    }
+    if (state === 'ready') { if (GAME_KEYS.has(k)) state = 'play'; return; }
+    if (state === 'win')   { if (k === ' ' || k === 'enter') reset(); return; }
+    down.add(k);
+    [p1, p2].forEach(f => {
+      if (k === f.controls.attack) tryAttack(f);
+      if (k === f.controls.thrw)   tryThrow(f);
+      if (k === f.controls.parry)  tryParry(f);
+    });
+  });
+  addEventListener('keyup', (e) => { down.delete(e.key.toLowerCase()); });
+  addEventListener('blur', () => down.clear());
+
+  function tryAttack(f) {
+    if (f.attack > 0 || f.cooldown > 0 || f.shielding || f.parry > 0) return;
+    f.attack = ATTACK_DUR; f.resolved = false; sfx('swing', 0.6);
+  }
+  function tryParry(f) {
+    if (f.parry > 0 || f.parryCd > 0 || f.attack > 0 || f.cooldown > 0) return;
+    f.parry = PARRY_WINDOW;
+  }
+  function tryThrow(f) {
+    if (!f.hasShield || f.attack > 0 || f.cooldown > 0) return;
+    f.hasShield = false; f.shielding = false;
+    projectiles.push({ x: f.x + f.dir*12, y: GROUND_Y - 34, dir: f.dir, owner: f, ang: 0 });
+    sfx('swing', 0.8);
+    floatMsg(f, '¡ESCUDO!');
+  }
+
+  function speedOf(f) { return (performance.now() < f.slowUntil) ? SLOW : WALK; }
+  function floatMsg(f, text) { f.msg = text; f.msgT = 70; }
+
+  function registerMiss(f) {
+    f.misses++;
+    if (f.misses >= MISS_LIMIT) {
+      f.slowUntil = performance.now() + SLOW_MS; f.misses = 0; floatMsg(f, '¡LENTO!');
+    }
+  }
+
+  // suma un acierto a 'att' (golpeando a 'def'); maneja crecer espada y victoria
+  function scoreHit(att, def, msg) {
+    att.hits++; att.misses = 0;
+    def.flash = 10; def.knock = 7 * att.dir; shakeT = 8;
+    if (att.hits === 2 && att.swordLvl === 1) { att.swordLvl = 1.5; floatMsg(att, '¡ESPADA +!'); }
+    else floatMsg(att, msg || '¡TOCADO!');
+    dogCheer(att, 'score');
+    if (att.hits >= WIN_HITS) { state = 'win'; winner = att; sfx('victory', 0.9); dogCheer(att, 'win'); }
+  }
+
+  function resolveAttack(att, def) {
+    const reach = REACH_BASE * att.swordLvl;
+    const gap = Math.abs(att.x - def.x) - FW;
+    if (gap > reach) { registerMiss(att); return; }     // al aire
+    if (def.parry > 0) {                                 // ¡PARRY! regresa el golpe
+      sfx('block', 0.85);
+      floatMsg(def, '¡PARRY!');
+      scoreHit(def, att, '¡REGRESADA!');
+      def.parry = 0; def.parryCd = PARRY_CD;
+      return;
+    }
+    if (def.shielding) {                                 // bloqueado (cuenta como fallo)
+      sfx('block', 0.8); def.flash = 4; registerMiss(att); floatMsg(def, 'BLOQUEO');
+      return;
+    }
+    sfx('hit', 0.85); scoreHit(att, def);                // conecta
+  }
+
+  function updateProjectiles() {
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      const pr = projectiles[i];
+      pr.x += pr.dir * THROW_SPEED; pr.ang += 0.5;
+      const foe = (pr.owner === p1) ? p2 : p1;
+      if (Math.abs(pr.x - foe.x) <= FW/2 + 3) {          // golpe garantizado
+        sfx('hit', 0.85);
+        scoreHit(pr.owner, foe, '¡ESCUDAZO!');
+        projectiles.splice(i, 1); continue;
+      }
+      if (pr.x < -24 || pr.x > W + 24) projectiles.splice(i, 1);
+    }
+  }
+
+  // ---------- Actualización ----------
+  function updateFighter(f, foe) {
+    if (f.msgT > 0) f.msgT--;
+    if (f.flash > 0) f.flash--;
+    if (f.knock !== 0) { f.x += f.knock; f.knock *= 0.78; if (Math.abs(f.knock) < 0.4) f.knock = 0; }
+
+    if (state === 'play') {
+      f.shielding = f.hasShield && down.has(f.controls.shield) && f.attack === 0 && f.cooldown === 0 && f.parry === 0;
+
+      if (!f.shielding && f.attack === 0 && f.parry === 0) {
+        const sp = speedOf(f);
+        if (down.has(f.controls.left))  f.x -= sp;
+        if (down.has(f.controls.right)) f.x += sp;
+      }
+
+      if (f.attack > 0) {
+        f.attack--;
+        if (!f.resolved && f.attack <= STRIKE_AT) { resolveAttack(f, foe); f.resolved = true; }
+        if (f.attack === 0) f.cooldown = COOLDOWN;
+      } else if (f.cooldown > 0) f.cooldown--;
+
+      if (f.parry > 0) { f.parry--; if (f.parry === 0) f.parryCd = PARRY_CD; }
+      else if (f.parryCd > 0) f.parryCd--;
+    }
+    f.x = Math.max(X_MIN, Math.min(X_MAX, f.x));
+  }
+
+  function update() {
+    updateFighter(p1, p2);
+    updateFighter(p2, p1);
+    updateProjectiles();
+    if (p2.x - p1.x < MIN_GAP) {
+      const mid = (p1.x + p2.x) / 2;
+      p1.x = Math.max(X_MIN, mid - MIN_GAP/2);
+      p2.x = Math.min(X_MAX, mid + MIN_GAP/2);
+    }
+    if (shakeT > 0) shakeT--;
+  }
+
+  // ---------- Dibujo ----------
+  function px(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x|0, y|0, w|0, h|0); }
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x+r, y); ctx.arcTo(x+w, y, x+w, y+h, r); ctx.arcTo(x+w, y+h, x, y+h, r);
+    ctx.arcTo(x, y+h, x, y, r); ctx.arcTo(x, y, x+w, y, r); ctx.closePath();
+  }
+
+  function drawBackground() {
+    const sky = ctx.createLinearGradient(0,0,0,H);
+    sky.addColorStop(0, '#9cc2e6'); sky.addColorStop(1, '#e9d9a8');
+    ctx.fillStyle = sky; ctx.fillRect(0,0,W,150);
+
+    const rings = [ {y:28,h:30,c:'#7d6a4a'}, {y:58,h:30,c:'#8f7c58'}, {y:88,h:34,c:'#a08a63'} ];
+    rings.forEach((r, ri) => {
+      px(0, r.y, W, r.h, r.c);
+      for (let x = 8; x < W; x += 34) {
+        px(x, r.y + 4, 22, r.h - 8, '#3a2f1d');
+        px(x + 3, r.y + 7, 16, r.h - 12, ri===2 ? '#241a0c' : '#4a3c25');
+      }
+      if (ri < 2) for (let x = 4; x < W; x += 6) {
+        const c = ['#caa','#ac9','#9ab','#cb9','#bbb'][(x+ri)%5];
+        px(x, r.y + 2 + ((x*7+ri*3)%4), 3, 3, c);
+      }
+    });
+
+    px(0, 120, W, 14, '#5d4a2c');
+    for (let x = 0; x < W; x += 16) px(x, 120, 2, 14, '#3a2c16');
+
+    const sand = ctx.createLinearGradient(0,134,0,H);
+    sand.addColorStop(0, '#d8b876'); sand.addColorStop(1, '#b8965a');
+    ctx.fillStyle = sand; ctx.fillRect(0,134,W,H-134);
+    ctx.fillStyle = 'rgba(120,90,40,0.18)';
+    for (let i = 0; i < 40; i++) ctx.fillRect((i*53 % W), 150 + (i*37 % (H-150)), 6, 2);
+    px(W/2 - 1, 134, 2, H-134, 'rgba(150,110,50,0.25)');
+  }
+
+  // espada con chop vertical (de arriba hacia abajo)
+  function drawSword(f, handX, handY) {
+    const p = f.attack > 0 ? (ATTACK_DUR - f.attack) / ATTACK_DUR : -1;
+    const reach = REACH_BASE * f.swordLvl;
+    const len = 16 + reach * 0.6;
+    const bw = f.swordLvl > 1 ? 5 : 4;
+    let ang;
+    if (p < 0) ang = -Math.PI * 0.50;                       // reposo: en guardia, hoja en alto
+    else       ang = -Math.PI * 0.92 + (Math.PI * 1.05) * p; // chop: arriba -> abajo
+    ctx.save();
+    ctx.translate(handX, handY);
+    ctx.scale(f.dir, 1);                                    // +x = hacia el rival
+    ctx.rotate(ang);
+    ctx.fillStyle = f.pal.metal;  ctx.fillRect(2, -bw/2, len, bw);
+    ctx.fillStyle = '#ffffff';    ctx.fillRect(2, -bw/2, len, 1);
+    ctx.fillStyle = f.pal.metalD; ctx.fillRect(2 + len, -bw/2 - 1, 2, bw + 2);
+    if (f.swordLvl > 1) { ctx.fillStyle = 'rgba(255,240,150,0.75)'; ctx.fillRect(2, -bw/2 - 1, len, 1); }
+    ctx.restore();
+    px(handX - 2, handY - 2, 4, 5, '#5a3a12');
+    px(handX - 4, handY - 1, 8, 2, '#caa54a');
+  }
+
+  function drawShield(f, cx, frontX) {
+    if (!f.hasShield) return;
+    const sx = f.shielding ? frontX + f.dir*3 : cx - f.dir*4;
+    const sy = f.shielding ? GROUND_Y - 40 : GROUND_Y - 34;
+    const sw = 7, sh = 22;
+    const left = f.dir > 0 ? sx : sx - sw;
+    px(left, sy, sw, sh, f.pal.metalD);
+    px(left + 1, sy + 1, sw - 2, sh - 2, f.pal.metal);
+    px(left + (sw/2 - 1), sy + sh/2 - 2, 2, 4, f.pal.main);
+  }
+
+  function drawFighter(f) {
+    const cx = Math.round(f.x), fy = GROUND_Y;
+    const tint = f.flash > 0 && (f.flash % 2 === 0);
+    const C = f.pal;
+    const skin  = tint ? '#fff' : C.skin;
+    const main  = tint ? '#fff' : C.main;
+    const metal = tint ? '#fff' : C.metal;
+
+    // sombra de contacto (más marcada para que no "floten")
+    ctx.fillStyle = 'rgba(0,0,0,0.32)';
+    ctx.beginPath(); ctx.ellipse(cx, fy, 13, 3.5, 0, 0, Math.PI*2); ctx.fill();
+
+    // piernas plantadas + sandalias sobre el piso
+    px(cx - 7, fy - 18, 6, 16, '#caa478');     // pierna trasera
+    px(cx + 1, fy - 18, 6, 16, '#d2ac7e');     // pierna delantera
+    px(cx - 9, fy - 3, 9, 3, '#6e4d22');       // sandalia trasera
+    px(cx + 0, fy - 3, 9 + (f.dir>0?2:0), 3, '#8a5f2c'); // sandalia delantera (apunta al frente)
+    px(cx + (f.dir>0?9:-2), fy - 3, 2, 3, '#5a3d18');     // punta del pie delantero
+
+    // falda (pteruges)
+    for (let i = -1; i <= 1; i++) px(cx - 10 + i*7, fy - 26, 6, 12, i===0 ? C.dark : main);
+
+    // torso / coraza
+    px(cx - 10, fy - 48, 20, 22, '#9aa0ad');
+    px(cx - 9,  fy - 47, 18, 9,  metal);
+    px(cx - 7,  fy - 37, 14, 6,  main);
+    px(cx - 9,  fy - 32, 18, 4,  '#7d828d');
+
+    // cuello + cabeza
+    px(cx - 3, fy - 51, 6, 4, skin);
+    px(cx - 6, fy - 62, 12, 12, skin);
+    px(cx - 7, fy - 64, 14, 7, metal);
+    px(cx - 7, fy - 57, 14, 2, C.metalD);
+    px(cx - 7, fy - 56, 3, 6, metal);
+    px(cx + f.dir*1, fy - 54, 2, 2, '#23303a');
+    for (let i = 0; i < 5; i++) px(cx - 4 + i*2, fy - 70 + Math.abs(i-2), 2, 8 - Math.abs(i-2), C.plume);
+
+    // brazo trasero + escudo
+    const frontX = cx + f.dir * 11;
+    drawShield(f, cx, frontX);
+
+    // brazo delantero + espada
+    const shoulderY = fy - 44;
+    let handX = cx + f.dir * 11, handY = shoulderY - 2;
+    if (f.attack > 0) {
+      const p = (ATTACK_DUR - f.attack) / ATTACK_DUR;
+      handY = shoulderY - 2 - Math.sin(p*Math.PI) * 4; // la mano sube un poco en el chop
+    }
+    px(cx + (f.dir>0?6:-6-3), shoulderY, 9, 4, skin);
+    drawSword(f, handX, handY);
+
+    // destello de parry
+    if (f.parry > 0) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx + f.dir*12, fy - 38, 12, -Math.PI*0.5*f.dir + (f.dir>0?-0.8:0.8), -Math.PI*0.5*f.dir + (f.dir>0?0.8:-0.8)); ctx.stroke();
+    }
+
+    if (f.msgT > 0) {
+      ctx.font = '7px "Courier New", monospace'; ctx.textAlign = 'center';
+      ctx.fillStyle = f.msg === '¡LENTO!' ? '#ff6a3d' : (f.msg === 'BLOQUEO' ? '#9fd0ff' : '#ffe27a');
+      ctx.fillText(f.msg, cx, fy - 80 - (70 - f.msgT)*0.15);
+    }
+    if (performance.now() < f.slowUntil) {
+      ctx.strokeStyle = 'rgba(255,90,40,0.5)'; ctx.lineWidth = 1;
+      ctx.strokeRect(cx-12, fy-66, 24, 66);
+    }
+  }
+
+  function drawProjectile(pr) {
+    const pal = pr.owner.pal;
+    ctx.save();
+    ctx.translate(pr.x, pr.y); ctx.rotate(pr.ang);
+    px(-4, -7, 8, 14, pal.metalD);
+    px(-3, -6, 6, 12, pal.metal);
+    px(-1, -2, 2, 4, pal.main);
+    ctx.restore();
+  }
+
+  function drawDog(d) {
+    const x = Math.round(d.x), base = 252, dir = d.dir, c = d.pal;
+    const body = '#b98a4e', dark = '#7d5a2e';
+    const wag = Math.sin(performance.now()/120) * 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath(); ctx.ellipse(x, base+1, 12, 3, 0, 0, Math.PI*2); ctx.fill();
+    px(x - 6, base - 5, 3, 5, dark);                 // patas
+    px(x + 3, base - 5, 3, 5, dark);
+    px(x - 8 - (dir>0?3:0), base - 12 + wag, 5, 3, body); // cola (atrás)
+    px(x - 8, base - 13, 16, 9, body);               // cuerpo
+    const hx = x + dir * 9;                           // cabeza al frente
+    px(hx - 4, base - 18, 8, 8, body);
+    px(hx - 4, base - 21, 3, 4, dark);               // oreja
+    px(hx + dir*4 - (dir>0?0:2), base - 14, 3, 3, dark); // hocico
+    px(hx + (dir>0?1:0), base - 16, 1, 1, '#1a1206');    // ojo
+    px(x + dir*3 - 1, base - 13, 2, 8, c.main);      // collar
+  }
+
+  function drawBubble(cx, yBottom, text, pal) {
+    ctx.font = '6px "Courier New", monospace';
+    const w = Math.max(30, ctx.measureText(text).width + 8), h = 12;
+    let bx = Math.max(3, Math.min(W - w - 3, cx - w/2));
+    const by = yBottom - 16;
+    ctx.fillStyle = 'rgba(255,250,235,0.97)';
+    roundRect(bx, by, w, h, 3); ctx.fill();
+    ctx.strokeStyle = pal.dark; ctx.lineWidth = 1; roundRect(bx, by, w, h, 3); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,250,235,0.97)';
+    ctx.beginPath(); ctx.moveTo(cx-3, by+h-1); ctx.lineTo(cx+3, by+h-1); ctx.lineTo(cx, by+h+4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#2a1d0a'; ctx.textAlign = 'center';
+    ctx.fillText(text, bx + w/2, by + 8);
+  }
+
+  function drawDogs() {
+    [dogL, dogR].forEach(d => {
+      drawDog(d);
+      if (performance.now() < d.msgUntil && d.msg) drawBubble(d.x, 252 - 18, d.msg, d.pal);
+    });
+  }
+
+  function drawPips(x, y, hits, color, align) {
+    for (let i = 0; i < WIN_HITS; i++) {
+      const px0 = align === 'left' ? x + i*14 : x - (WIN_HITS-1-i)*14;
+      ctx.fillStyle = i < hits ? color : '#3a2f1d';
+      ctx.beginPath(); ctx.arc(px0, y, 5, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = '#1a1206'; ctx.lineWidth = 1; ctx.stroke();
+    }
+  }
+
+  function shieldIcon(x, y, ok, pal) {
+    ctx.fillStyle = ok ? pal.metal : '#3a2f1d';
+    px(x-3, y-4, 6, 7, ok ? pal.metal : '#3a2f1d');
+    px(x-1, y-2, 2, 3, ok ? pal.main : '#2a2114');
+    if (!ok) { ctx.strokeStyle='#7a1f12'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x-4,y-5); ctx.lineTo(x+4,y+4); ctx.stroke(); }
+  }
+
+  function drawHUD() {
+    ctx.fillStyle = 'rgba(20,14,6,0.78)'; ctx.fillRect(0, 0, W, 22);
+    px(0, 22, W, 2, '#6b4a17');
+    ctx.textAlign = 'left'; ctx.font = 'bold 9px "Courier New", monospace';
+    ctx.fillStyle = PAL_RED.plume;  ctx.fillText('ROJO', 8, 10);
+    drawPips(8, 16, p1.hits, '#ff5a3d', 'left');
+    shieldIcon(58, 15, p1.hasShield, PAL_RED);
+    ctx.textAlign = 'right'; ctx.fillStyle = PAL_BLUE.plume; ctx.fillText('AZUL', W-8, 10);
+    drawPips(W-8, 16, p2.hits, '#5aa8ff', 'right');
+    shieldIcon(W-58, 15, p2.hasShield, PAL_BLUE);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e8c66a'; ctx.font = 'bold 8px "Courier New", monospace'; ctx.fillText('PRIMERO EN 3', W/2, 9);
+    ctx.fillStyle = '#c9b48a'; ctx.font = '7px "Courier New", monospace';
+    ctx.fillText('fallos ' + p1.misses + '/3', W/2 - 62, 17);
+    ctx.fillText('fallos ' + p2.misses + '/3', W/2 + 62, 17);
+  }
+
+  function drawReady() {
+    ctx.fillStyle = 'rgba(10,7,3,0.55)'; ctx.fillRect(0,0,W,H);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e8c66a'; ctx.font = 'bold 22px "Courier New", monospace'; ctx.fillText('⚔ GLADIADORES ⚔', W/2, 100);
+    ctx.fillStyle = '#f4e4c1'; ctx.font = '9px "Courier New", monospace';
+    ctx.fillText('Espada · escudo · tira el escudo (golpe seguro) · parry para regresar', W/2, 122);
+    const blink = (Math.floor(performance.now()/450) % 2) === 0;
+    if (blink) { ctx.fillStyle = '#fff'; ctx.font = 'bold 11px "Courier New", monospace';
+      ctx.fillText('Presiona cualquier tecla para comenzar', W/2, 158); }
+  }
+
+  function drawWin() {
+    ctx.fillStyle = 'rgba(10,7,3,0.62)'; ctx.fillRect(0,0,W,H);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = winner.pal.plume; ctx.font = 'bold 22px "Courier New", monospace'; ctx.fillText('¡VICTORIA!', W/2, 104);
+    ctx.fillStyle = '#f4e4c1'; ctx.font = 'bold 14px "Courier New", monospace'; ctx.fillText('Gladiador ' + winner.name, W/2, 130);
+    const blink = (Math.floor(performance.now()/450) % 2) === 0;
+    if (blink) { ctx.fillStyle = '#fff'; ctx.font = '10px "Courier New", monospace'; ctx.fillText('Espacio / Enter para revancha', W/2, 168); }
+  }
+
+  function render() {
+    ctx.save();
+    if (shakeT > 0) ctx.translate((Math.random()-0.5)*4, (Math.random()-0.5)*4);
+    drawBackground();
+    [p1, p2].forEach(drawFighter);
+    projectiles.forEach(drawProjectile);
+    drawDogs();
+    ctx.restore();
+    drawHUD();
+    if (state === 'ready') drawReady();
+    if (state === 'win') drawWin();
+    if (performance.now() < eggUntil) drawEgg();
+  }
+
+  function drawEgg() {
+    const t = performance.now();
+    ctx.fillStyle = 'rgba(10,7,3,0.72)'; ctx.fillRect(0,0,W,H);
+    const bw = 250, bh = 74, bx = (W-bw)/2, by = (H-bh)/2;
+    ctx.fillStyle = '#1a1206'; roundRect(bx-3,by-3,bw+6,bh+6,7); ctx.fill();
+    ctx.fillStyle = '#e8c66a'; roundRect(bx,by,bw,bh,6); ctx.fill();
+    ctx.fillStyle = '#241a0c'; roundRect(bx+4,by+4,bw-8,bh-8,4); ctx.fill();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffe27a'; ctx.font = 'bold 8px "Courier New", monospace';
+    ctx.fillText('★  8-BITS  ★', W/2, by+20);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 16px "Courier New", monospace';
+    ctx.fillText('GRACIAS POR JUGAR', W/2, by+44);
+    if ((Math.floor(t/300)%2)===0) {
+      ctx.fillStyle = '#9fd0ff'; ctx.font = '7px "Courier New", monospace';
+      ctx.fillText('· easter egg ·', W/2, by+60);
+    }
+  }
+
+  function loop() {
+    if (state === 'play') update();
+    else { [p1,p2].forEach(f => { if (f.msgT>0) f.msgT--; if (f.flash>0) f.flash--; }); if (shakeT>0) shakeT--; }
+    updateDog(dogL); updateDog(dogR);
+    render();
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+</script>
+</body>
+</html>
