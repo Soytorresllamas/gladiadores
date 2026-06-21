@@ -18,7 +18,7 @@ Un juego de pelea local para **2 jugadores** en estilo pixel-art 16-bits. Dos gl
 ## Reglas
 
 - **Espadazo:** conecta si el rival está a tu alcance y sin el escudo arriba. Gana el primero en **3**.
-- **Escudo:** mantén la tecla para bloquear de frente (no puedes atacar ni moverte mientras escudas).
+- **Escudo:** mantén la tecla para bloquear de frente. Puedes **caminar** con el escudo arriba (más lento), pero no atacar.
 - **Tirar el escudo:** lo lanzas como proyectil — **golpe garantizado (+1)**, pero te quedas sin defensa el resto de la ronda.
 - **Parry:** apriétalo justo cuando te van a golpear y **regresas** el golpe (+1 para ti).
 - **Lento:** 3 fallos seguidos (al aire o bloqueados) te frenan unos segundos.

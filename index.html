@@ -290,8 +290,10 @@
     if (state === 'play') {
       f.shielding = f.hasShield && down.has(f.controls.shield) && f.attack === 0 && f.cooldown === 0 && f.parry === 0;
 
-      if (!f.shielding && f.attack === 0 && f.parry === 0) {
-        const sp = speedOf(f);
+      // puedes caminar con el escudo arriba (más lento); atacar/parry sí frenan el paso
+      if (f.attack === 0 && f.parry === 0) {
+        let sp = speedOf(f);
+        if (f.shielding) sp *= 0.6;   // caminata defensiva, más lenta
         if (down.has(f.controls.left))  f.x -= sp;
         if (down.has(f.controls.right)) f.x += sp;
       }
