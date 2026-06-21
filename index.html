@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gladiadores — Duelo de Coliseo</title>
+<meta name="description" content="Juego de pelea local para 2 jugadores en pixel-art 16-bits. Espada, escudo, parry... ¡y perritos que te animan! Gana el primero en 3 espadazos.">
+<!-- Tarjeta social -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="⚔ Gladiadores — Duelo de Coliseo">
+<meta property="og:description" content="Duelo de gladiadores en 16-bits para 2 jugadores. Espada, escudo, parry y perritos que te animan. ¡Gana el primero en 3 espadazos!">
+<meta property="og:url" content="https://soytorresllamas.github.io/gladiadores/">
+<meta property="og:image" content="https://soytorresllamas.github.io/gladiadores/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="⚔ Gladiadores — Duelo de Coliseo">
+<meta name="twitter:description" content="Duelo de gladiadores en 16-bits para 2 jugadores. Espada, escudo, parry y perritos que te animan.">
+<meta name="twitter:image" content="https://soytorresllamas.github.io/gladiadores/og-image.png">
 <style>
   :root { --bg:#1a1206; }
   * { box-sizing: border-box; }
@@ -34,33 +47,73 @@
     box-shadow: 0 0 0 4px #2a1d0a, 0 12px 40px rgba(0,0,0,.6);
     background: #6c8cb0;
   }
-  #help {
-    margin: 10px auto 16px;
-    font-size: 12.5px; line-height: 1.7;
-    color: #c9b48a; max-width: 920px;
+  #stage { position: relative; display: inline-block; line-height: 0; }
+  .dogbubble {
+    position: absolute; bottom: 15%; transform: translateX(-50%);
+    background: #fdf6e6; color: #2a1d0a;
+    font-family: "Courier New", monospace; font-weight: bold;
+    font-size: 13px; line-height: 1.1; white-space: nowrap;
+    padding: 4px 9px; border-radius: 7px; border: 2px solid #6b4a17;
+    box-shadow: 0 2px 0 rgba(0,0,0,.3);
+    opacity: 0; transition: opacity .15s; pointer-events: none;
   }
-  #help b { color: #e8c66a; }
-  .k { display:inline-block; background:#3a2a10; border:1px solid #6b4a17; border-radius:4px;
-       padding:1px 6px; margin:0 1px; color:#f4e4c1; font-weight:bold; }
-  #sig { margin: 2px auto 18px; font-size: 12px; color: #8a734a; letter-spacing: 1px; }
+  .dogbubble::after {
+    content: ''; position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%);
+    border-left: 5px solid transparent; border-right: 5px solid transparent;
+    border-top: 6px solid #fdf6e6;
+  }
+  #bubbleL { left: 11%; border-color: #b5341f; }
+  #bubbleR { left: 89%; border-color: #2f63b8; }
+
+  #controls { margin: 16px auto 4px; display: flex; gap: 34px; justify-content: center; flex-wrap: wrap; }
+  .player { text-align: center; }
+  .ptitle { font-size: 12px; font-weight: bold; letter-spacing: 1px; margin-bottom: 8px; }
+  .kb { display: grid; grid-template-columns: repeat(3, 56px); gap: 6px; }
+  .cap { background: #2a1d0a; border: 1px solid #6b4a17; border-radius: 5px;
+         padding: 4px 2px 5px; display: flex; flex-direction: column; align-items: center;
+         box-shadow: 0 2px 0 #160f05; }
+  .cap b { color: #f4e4c1; font-size: 15px; line-height: 1; }
+  .cap i { color: #c9b48a; font-size: 8.5px; font-style: normal; margin-top: 3px; }
+  .cap.move b { color: #e8c66a; }
+  #rules { margin: 8px auto 4px; font-size: 11.5px; line-height: 1.6; color: #9c855c; max-width: 780px; }
+  #rules b { color: #e8c66a; }
+  #sig { margin: 6px auto 18px; font-size: 12px; color: #8a734a; letter-spacing: 1px; }
   #sig b { color: #e8c66a; }
 </style>
 </head>
 <body>
   <div id="wrap">
     <h1>⚔ GLADIADORES ⚔</h1>
-    <canvas id="game" width="480" height="270"></canvas>
-    <div id="help">
-      <b>ROJO (izq):</b> <span class="k">A</span><span class="k">D</span> mover ·
-      <span class="k">W</span> espadazo · <span class="k">S</span> escudo ·
-      <span class="k">Q</span> tirar escudo · <span class="k">E</span> parry
-      &nbsp;&nbsp;|&nbsp;&nbsp;
-      <b>AZUL (der):</b> <span class="k">J</span><span class="k">L</span> mover ·
-      <span class="k">I</span> espadazo · <span class="k">K</span> escudo ·
-      <span class="k">O</span> tirar escudo · <span class="k">U</span> parry
-      <br>Gana el primero en conectar <b>3 espadazos</b>. Tirar el escudo = golpe seguro pero te quedas sin defensa.
-      El <b>parry</b> justo a tiempo regresa el golpe. 3 fallos seguidos te dejan lento; 2 aciertos agrandan tu espada.
+    <div id="stage">
+      <canvas id="game" width="480" height="270"></canvas>
+      <div id="bubbleL" class="dogbubble"></div>
+      <div id="bubbleR" class="dogbubble"></div>
     </div>
+    <div id="controls">
+      <div class="player">
+        <div class="ptitle" style="color:#e23b2a">● ROJO — lado izquierdo</div>
+        <div class="kb">
+          <div class="cap"><b>Q</b><i>tira escudo</i></div>
+          <div class="cap"><b>W</b><i>espadazo</i></div>
+          <div class="cap"><b>E</b><i>parry</i></div>
+          <div class="cap move"><b>A</b><i>◄ mover</i></div>
+          <div class="cap"><b>S</b><i>escudo</i></div>
+          <div class="cap move"><b>D</b><i>mover ►</i></div>
+        </div>
+      </div>
+      <div class="player">
+        <div class="ptitle" style="color:#37a0e2">● AZUL — lado derecho</div>
+        <div class="kb">
+          <div class="cap"><b>U</b><i>parry</i></div>
+          <div class="cap"><b>I</b><i>espadazo</i></div>
+          <div class="cap"><b>O</b><i>tira escudo</i></div>
+          <div class="cap move"><b>J</b><i>◄ mover</i></div>
+          <div class="cap"><b>K</b><i>escudo</i></div>
+          <div class="cap move"><b>L</b><i>mover ►</i></div>
+        </div>
+      </div>
+    </div>
+    <div id="rules">Gana el primero en conectar <b>3 espadazos</b>. Tira el escudo = golpe seguro pero quedas sin defensa · el <b>parry</b> a tiempo regresa el golpe · 3 fallos seguidos te frenan · 2 aciertos agrandan tu espada.</div>
     <div id="sig">Diseñado, ideado y en parte programado por <b>8-bits</b></div>
   </div>
 
@@ -71,6 +124,7 @@
   const ctx = cv.getContext('2d');
   ctx.imageSmoothingEnabled = false;
   const W = cv.width, H = cv.height;
+  const bubbleEl = { L: document.getElementById('bubbleL'), R: document.getElementById('bubbleR') };
 
   // ---------- Audio ----------
   const SND = {};
@@ -565,25 +619,21 @@
     ctx.restore();
   }
 
-  function drawBubble(cx, yBottom, text, pal) {
-    ctx.font = '6px "Courier New", monospace';
-    const w = Math.max(30, ctx.measureText(text).width + 8), h = 12;
-    let bx = Math.max(3, Math.min(W - w - 3, cx - w/2));
-    const by = yBottom - 16;
-    ctx.fillStyle = 'rgba(255,250,235,0.97)';
-    roundRect(bx, by, w, h, 3); ctx.fill();
-    ctx.strokeStyle = pal.dark; ctx.lineWidth = 1; roundRect(bx, by, w, h, 3); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,250,235,0.97)';
-    ctx.beginPath(); ctx.moveTo(cx-3, by+h-1); ctx.lineTo(cx+3, by+h-1); ctx.lineTo(cx, by+h+4); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#2a1d0a'; ctx.textAlign = 'center';
-    ctx.fillText(text, bx + w/2, by + 8);
+  function drawDogs() {
+    drawDog(dogL); drawDog(dogR);
   }
 
-  function drawDogs() {
-    [dogL, dogR].forEach(d => {
-      drawDog(d);
-      if (performance.now() < d.msgUntil && d.msg) drawBubble(d.x, 252 - 18, d.msg, d.pal);
-    });
+  // globos de diálogo como overlay HTML (texto nítido, no pixelado)
+  function syncBubbles() {
+    for (const [key, d] of [['L', dogL], ['R', dogR]]) {
+      const el = bubbleEl[key];
+      if (state !== 'ready' && d.msg && performance.now() < d.msgUntil) {
+        if (el.textContent !== d.msg) el.textContent = d.msg;
+        el.style.opacity = '1';
+      } else if (el.style.opacity !== '0') {
+        el.style.opacity = '0';
+      }
+    }
   }
 
   function drawPips(x, y, hits, color, align) {
@@ -698,6 +748,7 @@
     if (state === 'play') update();
     else { [p1,p2].forEach(f => { if (f.msgT>0) f.msgT--; if (f.flash>0) f.flash--; }); if (shakeT>0) shakeT--; }
     updateDog(dogL); updateDog(dogR);
+    syncBubbles();
     render();
     requestAnimationFrame(loop);
   }

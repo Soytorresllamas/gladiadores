@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; image-rendering: auto; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1200" height="630"></canvas>
+<script>
+const ctx = document.getElementById('c').getContext('2d');
+const W = 1200, H = 630;
+const RED  = { main:'#b5341f', dark:'#7a1f12', plume:'#e23b2a' };
+const BLUE = { main:'#2f63b8', dark:'#1c3c75', plume:'#37a0e2' };
+const SKIN='#e0a878', METAL='#c9cdd6', METALD='#8a8f9c';
+function r(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(x,y,w,h); }
+
+// --- cielo ---
+let sky = ctx.createLinearGradient(0,0,0,H);
+sky.addColorStop(0,'#9cc2e6'); sky.addColorStop(0.5,'#e9d9a8');
+ctx.fillStyle = sky; ctx.fillRect(0,0,W,H);
+
+// --- gradas con arcos ---
+const bands = [{y:64,h:80,c:'#7d6a4a'},{y:144,h:80,c:'#8f7c58'},{y:224,h:90,c:'#a08a63'}];
+bands.forEach((b,bi)=>{
+  r(0,b.y,W,b.h,b.c);
+  for(let x=20;x<W;x+=86){ r(x,b.y+10,56,b.h-22,'#3a2f1d'); r(x+8,b.y+18,40,b.h-34, bi===2?'#241a0c':'#4a3c25'); }
+  if(bi<2) for(let x=12;x<W;x+=15){ const cc=['#caa','#ac9','#9ab','#cb9','#bbb'][(x+bi)%5]; r(x,b.y+6+((x*7+bi*3)%12),7,7,cc); }
+});
+
+// --- estandartes ---
+function banner(x,p){
+  r(x-22,86,44,6,'#2c2110'); r(x-18,92,36,132,p.main); r(x-18,92,36,12,p.dark); r(x-18,92,6,132,p.dark);
+  ctx.fillStyle=p.main; ctx.beginPath(); ctx.moveTo(x-18,224); ctx.lineTo(x+18,224); ctx.lineTo(x,242); ctx.closePath(); ctx.fill();
+  r(x-3,120,6,70,'rgba(244,228,193,.9)'); r(x-15,138,30,6,'rgba(244,228,193,.9)');
+}
+banner(168,RED); banner(W-168,BLUE);
+
+// --- muro + arena ---
+r(0,300,W,30,'#4a3a20'); for(let x=0;x<W;x+=40) r(x,300,5,30,'#2c2110');
+let sand = ctx.createLinearGradient(0,330,0,H);
+sand.addColorStop(0,'#8a6736'); sand.addColorStop(1,'#523c20');
+ctx.fillStyle=sand; ctx.fillRect(0,330,W,H-330);
+ctx.fillStyle='rgba(214,184,120,.16)';
+for(let i=0;i<140;i++) ctx.fillRect((i*97%W),360+(i*53%(H-360)),14,5);
+r(W/2-2,330,4,H-330,'rgba(28,18,8,.35)');
+
+// --- gladiador ---
+function glad(cx, fy, dir, C){
+  const S=3.6;
+  const b=(x,y,w,h,c)=>r(cx+x*S, fy+y*S, w*S, h*S, c);
+  ctx.fillStyle='rgba(0,0,0,.30)'; ctx.beginPath(); ctx.ellipse(cx, fy, 15*S, 4*S, 0,0,Math.PI*2); ctx.fill();
+  b(-7,-18,6,16,'#caa478'); b(1,-18,6,16,'#d2ac7e');                 // piernas
+  b(-9,-3,9,3,'#6e4d22'); b(0,-3, dir>0?11:9 ,3,'#8a5f2c');          // sandalias
+  for(let i=-1;i<=1;i++) b(-10+i*7,-26,6,12, i===0?C.dark:C.main);   // falda
+  b(-10,-48,20,22,'#9aa0ad'); b(-9,-47,18,9,METAL); b(-7,-37,14,6,C.main); b(-9,-32,18,4,'#7d828d'); // torso
+  b(-3,-51,6,4,SKIN); b(-6,-62,12,12,SKIN);                          // cabeza
+  b(-7,-64,14,7,METAL); b(-7,-57,14,2,METALD); b(-7,-56,3,6,METAL);
+  b(dir*1,-54,2,2,'#23303a');
+  for(let i=0;i<5;i++) b(-4+i*2,-70+Math.abs(i-2),2,8-Math.abs(i-2),C.plume); // cresta
+  const sx = -4*dir;                                                  // escudo
+  b(sx-3,-40,7,22,METALD); b(sx-2,-39,5,20,METAL); b(sx-1,-31,2,4,C.main);
+  b(dir>0?6:-9,-44,9,4,SKIN);                                         // brazo
+  // espada en alto (chop)
+  ctx.save();
+  ctx.translate(cx+dir*11*S, fy+(-46)*S); ctx.scale(dir,1); ctx.rotate(-Math.PI*0.80);
+  const len=(16+36*0.6)*S, bw=4*S;
+  ctx.fillStyle=METAL;  ctx.fillRect(2*S,-bw/2,len,bw);
+  ctx.fillStyle='#fff'; ctx.fillRect(2*S,-bw/2,len,S);
+  ctx.fillStyle=METALD; ctx.fillRect(2*S+len,-bw/2-S,2*S,bw+2*S);
+  ctx.restore();
+}
+glad(415, 560, +1, RED);
+glad(W-415, 560, -1, BLUE);
+
+// --- perritos ---
+function dog(cx, baseY, dir, C, type){
+  const S=3.4;
+  ctx.fillStyle='rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(cx, baseY+S, 12*S,3*S,0,0,Math.PI*2); ctx.fill();
+  ctx.save(); ctx.translate(cx, baseY); ctx.scale(S*dir, S);
+  const lr=(x,y,w,h,c)=>{ ctx.fillStyle=c; ctx.fillRect(x,y,w,h); };
+  if(type==='doxie'){
+    const body='#a9712f', dk='#7d4f1e';
+    lr(-9,-3,2.5,3,dk); lr(-3,-3,2.5,3,dk); lr(3,-3,2.5,3,dk); lr(8,-3,2.5,3,dk);
+    lr(-15,-9,5,2.5,body); lr(-13,-9,24,6,body); lr(-13,-9,24,1.5,'#c08a45');
+    lr(9,-14,7,8,body); lr(9,-16,3,8,dk); lr(15,-12,5,3,dk);
+    lr(12,-12,1.5,1.5,'#140d05'); lr(2,-9,2,6,C.main);
+  } else {
+    const body='#ece9e2', dk='#2a2a2a';
+    lr(-6,-5,3,5,'#cfccc4'); lr(2,-5,3,5,'#cfccc4');
+    lr(-9,-12,5,3,body); lr(-8,-13,16,9,body);
+    lr(-5,-12,4,3,dk); lr(1,-9,3,3,dk); lr(-6,-7,3,2,dk);
+    lr(6,-18,8,8,body); lr(6,-20,3,4,dk); lr(7,-16,3,3,dk);
+    lr(13,-14,3,3,'#c98c8c'); lr(10,-16,1.5,1.5,'#1a1206'); lr(4,-13,2,8,C.main);
+  }
+  ctx.restore();
+}
+dog(150, 600, +1, RED, 'spot');
+dog(W-150, 600, -1, BLUE, 'doxie');
+
+// --- viñeta ---
+let vg = ctx.createRadialGradient(W/2,320,200,W/2,320,720);
+vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.48)');
+ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+
+// --- título ---
+ctx.textAlign='center';
+ctx.font='bold 94px "Courier New", monospace';
+ctx.lineWidth=9; ctx.strokeStyle='#2a1808'; ctx.strokeText('⚔ GLADIADORES ⚔', W/2, 150);
+ctx.fillStyle='#e8c66a'; ctx.fillText('⚔ GLADIADORES ⚔', W/2, 150);
+ctx.font='bold 31px "Courier New", monospace';
+ctx.lineWidth=6; ctx.strokeStyle='#2a1808'; ctx.strokeText('Duelo de coliseo · 2 jugadores · 16-bits', W/2, 198);
+ctx.fillStyle='#f4e4c1'; ctx.fillText('Duelo de coliseo · 2 jugadores · 16-bits', W/2, 198);
+
+// --- chip de URL ---
+ctx.font='bold 30px "Courier New", monospace';
+const url='soytorresllamas.github.io/gladiadores';
+const tw=ctx.measureText(url).width;
+r(W/2-tw/2-26, H-70, tw+52, 48, '#1a1206');
+ctx.strokeStyle='#6b4a17'; ctx.lineWidth=3; ctx.strokeRect(W/2-tw/2-26, H-70, tw+52, 48);
+ctx.fillStyle='#ffe27a'; ctx.fillText(url, W/2, H-37);
+
+window.__done = true;
+</script>
+</body>
+</html>
