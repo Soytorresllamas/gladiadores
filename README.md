@@ -23,7 +23,8 @@ Un juego de pelea local para **2 jugadores** en estilo pixel-art 16-bits. Dos gl
 - **Parry:** apriétalo justo cuando te van a golpear y **regresas** el golpe (+1 para ti).
 - **Lento:** 3 fallos seguidos (al aire o bloqueados) te frenan unos segundos.
 - **Espada +:** al 2º acierto tu espada crece 1.5× (más alcance).
-- Y hay un **easter egg** escondido en el teclado. 😉
+- **Perritos NPC:** cada gladiador tiene un perrito que lo anima. En la pantalla de inicio, haz **click en tu lado** para elegir su raza: Negro, Moteado o Salchicha.
+- Y hay **un par de easter eggs** escondidos en el teclado. 😉
 
 ## Créditos
 

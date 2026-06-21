@@ -119,6 +119,9 @@
 
   let p1, p2, state, winner, shakeT = 0, projectiles = [];
   let eggUntil = 0, eggCount = 0, eggLast = 0;   // easter egg (tecla 8 x3)
+  let dogsGhost = false, eggG = 0, eggGLast = 0; // easter egg (tecla g x3 -> fantasmas)
+  const BREEDS = ['Negro', 'Moteado', 'Salchicha'];
+  const GHOST_MSG = ['¡Buuu!', '¡Uuuh!', '¡Fantasmal!', '¡Buu buu!'];
 
   function reset() {
     p1 = makeFighter({ name:'ROJO', pal:PAL_RED,  x:150, dir:+1,
@@ -136,13 +139,13 @@
     blue: { cheer:['¡Vamos Azul!','¡Aguanta!','¡Atácalo ya!','¡Guau!','¡Por la gloria!','¡Tú puedes!','¡Ese es mío!'],
             win:['¡GANAMOS!','¡Campeón Azul!','¡Guau guau guau!'] }
   };
-  function makeDog(x, dir, pal, msgs) {
-    return { x, dir, pal, msgs, msg:'', msgUntil:0, nextAt: performance.now() + 1500 + Math.random()*2500 };
+  function makeDog(x, dir, pal, msgs, breed) {
+    return { x, dir, pal, msgs, breed, msg:'', msgUntil:0, nextAt: performance.now() + 1500 + Math.random()*2500 };
   }
   let dogL, dogR;
   function initDogs() {
-    dogL = makeDog(50,  +1, PAL_RED,  DOG_MSG.red);
-    dogR = makeDog(430, -1, PAL_BLUE, DOG_MSG.blue);
+    dogL = makeDog(50,  +1, PAL_RED,  DOG_MSG.red,  0); // Negro
+    dogR = makeDog(430, -1, PAL_BLUE, DOG_MSG.blue, 2); // Salchicha
   }
   function dogCheer(fighter, kind) {
     const d = (fighter === p1) ? dogL : dogR;
@@ -155,7 +158,8 @@
   function updateDog(d) {
     const t = performance.now();
     if (t > d.nextAt && t > d.msgUntil) {
-      d.msg = d.msgs.cheer[(Math.random()*d.msgs.cheer.length)|0];
+      const pool = dogsGhost ? GHOST_MSG : d.msgs.cheer;
+      d.msg = pool[(Math.random()*pool.length)|0];
       d.msgUntil = t + 2400;
       d.nextAt = t + 4500 + Math.random()*4000;
     }
@@ -179,6 +183,13 @@
       eggLast = now;
       if (eggCount >= 3) { eggUntil = now + 3200; eggCount = 0; }
     }
+    // easter egg: aprieta "g" tres veces -> los perritos se vuelven fantasmas (alterna)
+    if (k === 'g') {
+      const now = performance.now();
+      eggG = (now - eggGLast < 1300) ? eggG + 1 : 1;
+      eggGLast = now;
+      if (eggG >= 3) { dogsGhost = !dogsGhost; eggG = 0; }
+    }
     if (state === 'ready') { if (GAME_KEYS.has(k)) state = 'play'; return; }
     if (state === 'win')   { if (k === ' ' || k === 'enter') reset(); return; }
     down.add(k);
@@ -190,6 +201,17 @@
   });
   addEventListener('keyup', (e) => { down.delete(e.key.toLowerCase()); });
   addEventListener('blur', () => down.clear());
+  // en la pantalla de inicio: click en tu lado para cambiar de perrito
+  cv.addEventListener('click', (e) => {
+    if (state !== 'ready') return;
+    const rect = cv.getBoundingClientRect();
+    const y = (e.clientY - rect.top) * (H / rect.height);
+    if (y < 30) return;
+    const x = (e.clientX - rect.left) * (W / rect.width);
+    const d = x < W / 2 ? dogL : dogR;
+    d.breed = (d.breed + 1) % BREEDS.length;
+    unlockAudio();
+  });
 
   function tryAttack(f) {
     if (f.attack > 0 || f.cooldown > 0 || f.shielding || f.parry > 0) return;
@@ -324,15 +346,33 @@
       }
     });
 
-    px(0, 120, W, 14, '#5d4a2c');
-    for (let x = 0; x < W; x += 16) px(x, 120, 2, 14, '#3a2c16');
+    // estandartes de equipo colgando del muro
+    drawBanner(64, PAL_RED);
+    drawBanner(W - 64, PAL_BLUE);
 
+    px(0, 120, W, 14, '#4a3a20');
+    for (let x = 0; x < W; x += 16) px(x, 120, 2, 14, '#2c2110');
+
+    // arena (tierra apisonada oscura para que resalten las piernas claras)
     const sand = ctx.createLinearGradient(0,134,0,H);
-    sand.addColorStop(0, '#d8b876'); sand.addColorStop(1, '#b8965a');
+    sand.addColorStop(0, '#8a6736'); sand.addColorStop(1, '#523c20');
     ctx.fillStyle = sand; ctx.fillRect(0,134,W,H-134);
-    ctx.fillStyle = 'rgba(120,90,40,0.18)';
-    for (let i = 0; i < 40; i++) ctx.fillRect((i*53 % W), 150 + (i*37 % (H-150)), 6, 2);
-    px(W/2 - 1, 134, 2, H-134, 'rgba(150,110,50,0.25)');
+    ctx.fillStyle = 'rgba(214,184,120,0.16)';   // grano claro
+    for (let i = 0; i < 46; i++) ctx.fillRect((i*53 % W), 150 + (i*37 % (H-150)), 6, 2);
+    px(W/2 - 1, 134, 2, H-134, 'rgba(28,18,8,0.38)');  // surco central
+  }
+
+  function drawBanner(x, pal) {
+    px(x - 8, 34, 16, 2, '#2c2110');                 // barra superior
+    px(x - 7, 36, 14, 50, pal.main);                 // tela
+    px(x - 7, 36, 14, 5, pal.dark);                  // sombra superior
+    px(x - 7, 36, 2, 50, pal.dark);                  // pliegue lateral
+    ctx.fillStyle = pal.main;                        // pico inferior de la bandera
+    ctx.beginPath(); ctx.moveTo(x-7,86); ctx.lineTo(x+7,86); ctx.lineTo(x,92); ctx.closePath(); ctx.fill();
+    // emblema: espada pálida
+    px(x - 1, 46, 2, 26, 'rgba(244,228,193,0.9)');
+    px(x - 5, 52, 10, 2, 'rgba(244,228,193,0.9)');
+    px(x - 1, 70, 2, 4, 'rgba(244,228,193,0.7)');
   }
 
   // espada con chop vertical (de arriba hacia abajo)
@@ -446,22 +486,81 @@
     ctx.restore();
   }
 
-  function drawDog(d) {
-    const x = Math.round(d.x), base = 252, dir = d.dir, c = d.pal;
-    const body = '#b98a4e', dark = '#7d5a2e';
-    const wag = Math.sin(performance.now()/120) * 2;
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';
-    ctx.beginPath(); ctx.ellipse(x, base+1, 12, 3, 0, 0, Math.PI*2); ctx.fill();
-    px(x - 6, base - 5, 3, 5, dark);                 // patas
-    px(x + 3, base - 5, 3, 5, dark);
-    px(x - 8 - (dir>0?3:0), base - 12 + wag, 5, 3, body); // cola (atrás)
-    px(x - 8, base - 13, 16, 9, body);               // cuerpo
-    const hx = x + dir * 9;                           // cabeza al frente
-    px(hx - 4, base - 18, 8, 8, body);
-    px(hx - 4, base - 21, 3, 4, dark);               // oreja
-    px(hx + dir*4 - (dir>0?0:2), base - 14, 3, 3, dark); // hocico
-    px(hx + (dir>0?1:0), base - 16, 1, 1, '#1a1206');    // ojo
-    px(x + dir*3 - 1, base - 13, 2, 8, c.main);      // collar
+  function fr(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
+
+  // razas en coords locales (pies en 0,0 · +x hacia adelante · -y arriba)
+  function drawBreed(breed, d, t) {
+    const wag = Math.sin(t/120) * 2, col = d.pal.main;
+    if (breed === 2) {                       // SALCHICHA: cuerpo largo y bajo, café
+      const body='#a9712f', dark='#7d4f1e';
+      fr(-9,-3,2.5,3,dark); fr(-3,-3,2.5,3,dark); fr(3,-3,2.5,3,dark); fr(8,-3,2.5,3,dark); // patitas cortas
+      fr(-15,-9+wag,5,2.5,body);             // cola larga
+      fr(-13,-9,24,6,body);                  // cuerpo largo
+      fr(-13,-9,24,1.5,'#c08a45');           // lomo claro
+      fr(9,-14,7,8,body);                    // cabeza
+      fr(9,-16,3,8,dark);                    // oreja larga caída
+      fr(15,-12,5,3,dark);                   // hocico largo
+      fr(12,-12,1.5,1.5,'#140d05');          // ojo
+      fr(2,-9,2,6,col);                      // collar
+    } else if (breed === 1) {                // MOTEADO: blanco con manchas negras
+      const body='#ece9e2', dark='#2a2a2a';
+      fr(-6,-5,3,5,'#cfccc4'); fr(2,-5,3,5,'#cfccc4');
+      fr(-9,-12+wag,5,3,body);
+      fr(-8,-13,16,9,body);
+      fr(-5,-12,4,3,dark); fr(1,-9,3,3,dark); fr(-6,-7,3,2,dark); // manchas
+      fr(6,-18,8,8,body);
+      fr(6,-20,3,4,dark);                    // oreja negra
+      fr(7,-16,3,3,dark);                    // mancha en la cara
+      fr(13,-14,3,3,'#c98c8c');              // hocico
+      fr(10,-16,1.5,1.5,'#1a1206');          // ojo
+      fr(4,-13,2,8,col);
+    } else {                                 // NEGRO
+      const body='#2d2d33', dark='#161618';
+      fr(-6,-5,3,5,dark); fr(2,-5,3,5,dark);
+      fr(-9,-12+wag,5,3,body);
+      fr(-8,-13,16,9,body);
+      fr(-8,-13,16,1.5,'#43434b');           // lomo con brillo
+      fr(6,-18,8,8,body);
+      fr(6,-20,3,4,dark);                    // oreja
+      fr(13,-14,3,3,dark);                   // hocico
+      fr(10,-16,1.5,1.5,'#e8c66a');          // ojo brillante
+      fr(4,-13,2,8,col);
+    }
+  }
+
+  function drawGhost(d, t) {
+    const fY = Math.sin(t/300) * 2 - 5;      // flota
+    const headY = -16 + fY, botY = -4 + fY;
+    ctx.globalAlpha = 0.22; ctx.fillStyle = d.pal.main;      // aura de equipo
+    ctx.beginPath(); ctx.ellipse(2, headY+6, 13, 15, 0, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 0.82; ctx.fillStyle = '#dbe7ff';       // cuerpo fantasma
+    ctx.beginPath();
+    ctx.arc(2, headY, 8, Math.PI, Math.PI*2, false);
+    ctx.lineTo(10, botY);
+    [[7.3,botY-3],[4.7,botY],[2,botY-3],[-0.7,botY],[-3.3,botY-3],[-6,botY]].forEach(p => ctx.lineTo(p[0], p[1]));
+    ctx.lineTo(-6, headY); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1; ctx.fillStyle = '#2a2a3a';          // ojos + boca
+    fr(-2, headY-2, 2.5, 3.5, '#2a2a3a'); fr(3.5, headY-2, 2.5, 3.5, '#2a2a3a');
+    fr(0.5, headY+5, 2.5, 2.5, '#2a2a3a');
+    ctx.globalAlpha = 0.85; fr(0, botY-1, 4, 2, d.pal.main); // moñito de equipo
+    ctx.globalAlpha = 1;
+  }
+
+  function drawDog(d, opts) {
+    opts = opts || {};
+    const scale = opts.scale || 1;
+    const cx = (opts.x != null ? opts.x : Math.round(d.x));
+    const base = (opts.y != null ? opts.y : 252);
+    const t = performance.now();
+    if (!dogsGhost) {                        // los fantasmas flotan, sin sombra
+      ctx.fillStyle = 'rgba(0,0,0,0.30)';
+      ctx.beginPath(); ctx.ellipse(cx, base+1, 12*scale, 3*scale, 0, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.save();
+    ctx.translate(cx, base);
+    ctx.scale(scale * d.dir, scale);         // espejo según dirección + escala
+    if (dogsGhost) drawGhost(d, t); else drawBreed(d.breed, d, t);
+    ctx.restore();
   }
 
   function drawBubble(cx, yBottom, text, pal) {
@@ -519,14 +618,29 @@
   }
 
   function drawReady() {
-    ctx.fillStyle = 'rgba(10,7,3,0.55)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = 'rgba(10,7,3,0.6)'; ctx.fillRect(0,0,W,H);
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#e8c66a'; ctx.font = 'bold 22px "Courier New", monospace'; ctx.fillText('⚔ GLADIADORES ⚔', W/2, 100);
-    ctx.fillStyle = '#f4e4c1'; ctx.font = '9px "Courier New", monospace';
-    ctx.fillText('Espada · escudo · tira el escudo (golpe seguro) · parry para regresar', W/2, 122);
+    ctx.fillStyle = '#e8c66a'; ctx.font = 'bold 21px "Courier New", monospace'; ctx.fillText('⚔ GLADIADORES ⚔', W/2, 54);
+    ctx.fillStyle = '#c9b48a'; ctx.font = '8px "Courier New", monospace';
+    ctx.fillText('espada · escudo · tira el escudo · parry', W/2, 72);
+
+    // panel de selección de perrito
+    ctx.fillStyle = 'rgba(20,14,6,0.85)'; roundRect(46, 84, W-92, 122, 8); ctx.fill();
+    ctx.strokeStyle = '#6b4a17'; ctx.lineWidth = 1; roundRect(46, 84, W-92, 122, 8); ctx.stroke();
+    ctx.fillStyle = '#f4e4c1'; ctx.font = 'bold 9px "Courier New", monospace';
+    ctx.fillText('Elige tu perrito  ·  click en tu lado', W/2, 100);
+
+    drawDog(dogL, { x: W*0.30, y: 168, scale: 2.0 });
+    drawDog(dogR, { x: W*0.70, y: 168, scale: 2.0 });
+
+    ctx.fillStyle = PAL_RED.plume;  ctx.font = 'bold 8px "Courier New", monospace'; ctx.fillText('ROJO', W*0.30, 182);
+    ctx.fillStyle = '#f4e4c1';       ctx.font = '9px "Courier New", monospace';    ctx.fillText('‹ ' + BREEDS[dogL.breed] + ' ›', W*0.30, 196);
+    ctx.fillStyle = PAL_BLUE.plume; ctx.font = 'bold 8px "Courier New", monospace'; ctx.fillText('AZUL', W*0.70, 182);
+    ctx.fillStyle = '#f4e4c1';       ctx.font = '9px "Courier New", monospace';    ctx.fillText('‹ ' + BREEDS[dogR.breed] + ' ›', W*0.70, 196);
+
     const blink = (Math.floor(performance.now()/450) % 2) === 0;
     if (blink) { ctx.fillStyle = '#fff'; ctx.font = 'bold 11px "Courier New", monospace';
-      ctx.fillText('Presiona cualquier tecla para comenzar', W/2, 158); }
+      ctx.fillText('Presiona cualquier tecla para comenzar', W/2, 230); }
   }
 
   function drawWin() {
@@ -538,13 +652,21 @@
     if (blink) { ctx.fillStyle = '#fff'; ctx.font = '10px "Courier New", monospace'; ctx.fillText('Espacio / Enter para revancha', W/2, 168); }
   }
 
+  function drawVignette() {
+    const g = ctx.createRadialGradient(W/2, 150, 90, W/2, 150, 310);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(0,0,0,0.34)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+
   function render() {
     ctx.save();
     if (shakeT > 0) ctx.translate((Math.random()-0.5)*4, (Math.random()-0.5)*4);
     drawBackground();
     [p1, p2].forEach(drawFighter);
     projectiles.forEach(drawProjectile);
-    drawDogs();
+    if (state !== 'ready') drawDogs();   // perritos de esquina solo en juego/victoria
+    drawVignette();
     ctx.restore();
     drawHUD();
     if (state === 'ready') drawReady();
