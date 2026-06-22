@@ -184,11 +184,11 @@
               dashFrames:8, dashSpeedMult:2.6, dashCooldown:30 },
     bomber: { name:'BOMBARDERO', kit:'escudo · tira · bomba',
               attackType:'bomb',  hasShield:true,  canThrow:true,  hasParry:false, hasDodge:false,
-              bombVx:3.2, bombVy:-4.6, bombGravity:0.3, blastRadius:30, bombKnock:10, bombCooldown:45 }
+              bombVx:4.6, bombVy:-4.6, bombGravity:0.3, blastRadius:30, bombKnock:10, bombCooldown:45 }
   };
   const CLASS_ORDER = ['glad','archer','bomber'];
 
-  let p1, p2, state, winner, shakeT = 0, projectiles = [];
+  let p1, p2, state, winner, shakeT = 0, projectiles = [], blasts = [];
   let eggUntil = 0, eggCount = 0, eggLast = 0;   // easter egg (tecla 8 x3)
   let dogsGhost = false, eggG = 0, eggGLast = 0; // easter egg (tecla g x3 -> fantasmas)
   const BREEDS = ['Negro', 'Moteado', 'Salchicha'];
@@ -200,7 +200,7 @@
       controls:{left:'a', right:'d', attack:'w', shield:'s', thrw:'q', parry:'e'} });
     p2 = makeFighter({ name:'AZUL', pal:PAL_BLUE, x:330, dir:-1, cls:selBlue,
       controls:{left:'j', right:'l', attack:'i', shield:'k', thrw:'o', parry:'u'} });
-    projectiles = [];
+    projectiles = []; blasts = [];
     state = 'ready'; winner = null;
   }
   function cycleClass(cur, d) {
@@ -365,6 +365,22 @@
     projectiles.push({ kind:'arrow', x:f.x + f.dir*16, y:GROUND_Y - 34,
       vx:f.dir*C.arrowSpeed, dir:f.dir, owner:f });
   }
+  function spawnBomb(f) {
+    const C = CLASSES[f.cls];
+    projectiles.push({ kind:'bomb', x:f.x + f.dir*14, y:GROUND_Y - 40,
+      vx:f.dir*C.bombVx, vy:C.bombVy, dir:f.dir, owner:f, ang:0 });
+  }
+  function explodeBomb(pr, foe) {
+    const C = CLASSES[pr.owner.cls];
+    shakeT = 8; sfx('hit', 0.7);
+    if (Math.abs(pr.x - foe.x) <= C.blastRadius && foe.invuln === 0) {
+      const dirAway = (foe.x < pr.x) ? -1 : 1;
+      if (foe.shielding) { foe.flash = 4; floatMsg(foe, 'BLOQUEO'); }   // bloquea el golpe...
+      else { scoreHit(pr.owner, foe, '¡BOMBA!'); }
+      foe.knock = dirAway * C.bombKnock;        // ...pero el empuje siempre llega (tras scoreHit)
+    }
+    blasts.push({ x:pr.x, y:GROUND_Y - 4, t:14, r:C.blastRadius });
+  }
   function resolveAttack(att, def) {
     const C = CLASSES[att.cls];
     if (C.attackType === 'arrow') { spawnArrow(att); return; }
@@ -400,8 +416,10 @@
         continue;
       }
 
-      if (pr.kind === 'bomb') {                    // cuerpo real en Task 5
-        if (typeof updateBomb === 'function') { updateBomb(pr, foe, i); }
+      if (pr.kind === 'bomb') {
+        pr.x += pr.vx; pr.vy += CLASSES[pr.owner.cls].bombGravity; pr.y += pr.vy; pr.ang += 0.3;
+        if (pr.y >= GROUND_Y - 6) { explodeBomb(pr, foe); projectiles.splice(i, 1); continue; }
+        if (pr.x < -24 || pr.x > W + 24) projectiles.splice(i, 1);
         continue;
       }
 
@@ -460,6 +478,7 @@
       p1.x = Math.max(X_MIN, mid - MIN_GAP/2);
       p2.x = Math.min(X_MAX, mid + MIN_GAP/2);
     }
+    for (let i = blasts.length - 1; i >= 0; i--) { if (--blasts[i].t <= 0) blasts.splice(i, 1); }
     if (shakeT > 0) shakeT--;
   }
 
@@ -554,6 +573,19 @@
     if (f.attack > 0 && f.windup > 0) { ctx.fillStyle = '#6b4a17'; ctx.fillRect(2 - drawn, -1, 12, 2); }
     ctx.restore();
     px(hx - 2, hy - 1, 4, 4, f.pal.skin);                       // mano
+  }
+  function drawBombHand(f, hx, hy) {
+    px(hx - 2, hy - 1, 4, 4, f.pal.skin);                       // mano
+    ctx.fillStyle = '#1c1c1c'; ctx.beginPath(); ctx.arc(hx + f.dir*3, hy + 1, 4, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#caa54a'; ctx.fillRect(hx + f.dir*3 - 1, hy - 5, 2, 3);
+    ctx.fillStyle = '#ff7a2a'; ctx.fillRect(hx + f.dir*3,     hy - 6, 2, 2);
+  }
+  function drawBlast(b) {
+    const a = b.t / 14, grow = 1.1 - a*0.5;
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#ffd27a'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r*grow, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#ff7a2a'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r*0.6*grow, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
   }
   function drawShield(f, cx, frontX) {
     if (!f.hasShield) return;
@@ -847,6 +879,7 @@
     drawBackground();
     [p1, p2].forEach(drawFighter);
     projectiles.forEach(drawProjectile);
+    blasts.forEach(drawBlast);
     if (state !== 'ready') drawDogs();   // perritos de esquina solo en juego/victoria
     drawVignette();
     ctx.restore();
