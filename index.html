@@ -203,6 +203,11 @@
     projectiles = [];
     state = 'ready'; winner = null;
   }
+  function cycleClass(cur, d) {
+    const i = (CLASS_ORDER.indexOf(cur) + d + CLASS_ORDER.length) % CLASS_ORDER.length;
+    return CLASS_ORDER[i];
+  }
+  function startMatch() { reset(); state = 'play'; }
 
   // ---------- Perritos NPC ----------
   const DOG_MSG = {
@@ -262,7 +267,12 @@
       eggGLast = now;
       if (eggG >= 3) { dogsGhost = !dogsGhost; eggG = 0; }
     }
-    if (state === 'ready') { if (GAME_KEYS.has(k)) state = 'play'; return; }
+    if (state === 'ready') {
+      if (k === 'a' || k === 'd') selRed  = cycleClass(selRed,  k === 'd' ? 1 : -1);
+      if (k === 'j' || k === 'l') selBlue = cycleClass(selBlue, k === 'l' ? 1 : -1);
+      if (k === ' ' || k === 'enter') startMatch();
+      return;
+    }
     if (state === 'win')   { if (k === ' ' || k === 'enter') reset(); return; }
     down.add(k);
     [p1, p2].forEach(f => {
@@ -690,27 +700,32 @@
   function drawReady() {
     ctx.fillStyle = 'rgba(10,7,3,0.6)'; ctx.fillRect(0,0,W,H);
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#e8c66a'; ctx.font = 'bold 21px "Courier New", monospace'; ctx.fillText('⚔ GLADIADORES ⚔', W/2, 54);
+    ctx.fillStyle = '#e8c66a'; ctx.font = 'bold 21px "Courier New", monospace'; ctx.fillText('⚔ GLADIADORES ⚔', W/2, 40);
     ctx.fillStyle = '#c9b48a'; ctx.font = '8px "Courier New", monospace';
-    ctx.fillText('espada · escudo · tira el escudo · parry', W/2, 72);
+    ctx.fillText('elige clase con tus teclas de mover · perrito con click', W/2, 56);
 
-    // panel de selección de perrito
-    ctx.fillStyle = 'rgba(20,14,6,0.85)'; roundRect(46, 84, W-92, 122, 8); ctx.fill();
-    ctx.strokeStyle = '#6b4a17'; ctx.lineWidth = 1; roundRect(46, 84, W-92, 122, 8); ctx.stroke();
-    ctx.fillStyle = '#f4e4c1'; ctx.font = 'bold 9px "Courier New", monospace';
-    ctx.fillText('Elige tu perrito  ·  click en tu lado', W/2, 100);
+    // panel
+    ctx.fillStyle = 'rgba(20,14,6,0.85)'; roundRect(40, 66, W-80, 150, 8); ctx.fill();
+    ctx.strokeStyle = '#6b4a17'; ctx.lineWidth = 1; roundRect(40, 66, W-80, 150, 8); ctx.stroke();
 
-    drawDog(dogL, { x: W*0.30, y: 168, scale: 2.0 });
-    drawDog(dogR, { x: W*0.70, y: 168, scale: 2.0 });
-
-    ctx.fillStyle = PAL_RED.plume;  ctx.font = 'bold 8px "Courier New", monospace'; ctx.fillText('ROJO', W*0.30, 182);
-    ctx.fillStyle = '#f4e4c1';       ctx.font = '9px "Courier New", monospace';    ctx.fillText('‹ ' + BREEDS[dogL.breed] + ' ›', W*0.30, 196);
-    ctx.fillStyle = PAL_BLUE.plume; ctx.font = 'bold 8px "Courier New", monospace'; ctx.fillText('AZUL', W*0.70, 182);
-    ctx.fillStyle = '#f4e4c1';       ctx.font = '9px "Courier New", monospace';    ctx.fillText('‹ ' + BREEDS[dogR.breed] + ' ›', W*0.70, 196);
+    const sides = [
+      { x:W*0.30, sel:selRed,  pal:PAL_RED,  lbl:'ROJO', dog:dogL, keys:'A / D' },
+      { x:W*0.70, sel:selBlue, pal:PAL_BLUE, lbl:'AZUL', dog:dogR, keys:'J / L' }
+    ];
+    for (const s of sides) {
+      ctx.fillStyle = s.pal.plume; ctx.font = 'bold 9px "Courier New", monospace'; ctx.fillText(s.lbl, s.x, 84);
+      drawDog(s.dog, { x:s.x, y:150, scale:1.8 });
+      ctx.fillStyle = '#fff';    ctx.font = 'bold 11px "Courier New", monospace';
+      ctx.fillText('‹ ' + CLASSES[s.sel].name + ' ›', s.x, 168);
+      ctx.fillStyle = '#c9b48a'; ctx.font = '7.5px "Courier New", monospace';
+      ctx.fillText(CLASSES[s.sel].kit, s.x, 182);
+      ctx.fillStyle = '#8a734a'; ctx.font = '7px "Courier New", monospace';
+      ctx.fillText(s.keys + ' cambia · ' + BREEDS[s.dog.breed], s.x, 196);
+    }
 
     const blink = (Math.floor(performance.now()/450) % 2) === 0;
     if (blink) { ctx.fillStyle = '#fff'; ctx.font = 'bold 11px "Courier New", monospace';
-      ctx.fillText('Presiona cualquier tecla para comenzar', W/2, 230); }
+      ctx.fillText('Espacio / Enter para comenzar', W/2, 232); }
   }
 
   function drawWin() {
