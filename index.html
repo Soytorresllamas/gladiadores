@@ -158,12 +158,16 @@
   const THROW_SPEED = 6;    // px/frame del escudo lanzado
 
   function makeFighter(o) {
+    const cls = o.cls || 'glad';
     return {
       name:o.name, pal:o.pal, x:o.x, dir:o.dir, controls:o.controls,
+      cls,
       hits:0, misses:0, swordLvl:1,
-      hasShield:true, shielding:false,
+      hasShield: CLASSES[cls].hasShield, shielding:false,
       attack:0, resolved:false, cooldown:0,
       parry:0, parryCd:0,
+      dash:0, dashCd:0, dashDir:0, invuln:0, windup:0,
+      healUsed:false, konami:0, konamiLast:0, healFlash:0,
       slowUntil:0, flash:0, knock:0, msg:'', msgT:0
     };
   }
@@ -171,16 +175,30 @@
   const PAL_RED  = { main:'#b5341f', dark:'#7a1f12', skin:'#e0a878', metal:'#c9cdd6', metalD:'#8a8f9c', plume:'#e23b2a' };
   const PAL_BLUE = { main:'#2f63b8', dark:'#1c3c75', skin:'#e0a878', metal:'#c9cdd6', metalD:'#8a8f9c', plume:'#37a0e2' };
 
+  const CLASSES = {
+    glad:   { name:'GLADIADOR',  kit:'escudo · tira · parry · espada',
+              attackType:'melee', hasShield:true,  canThrow:true,  hasParry:true,  hasDodge:false },
+    archer: { name:'ARQUERO',    kit:'esquive · parry · flecha',
+              attackType:'arrow', hasShield:false, canThrow:false, hasParry:true,  hasDodge:true,
+              arrowSpeed:7, arrowWindup:4, arrowCooldown:25,
+              dashFrames:8, dashSpeedMult:2.6, dashCooldown:30 },
+    bomber: { name:'BOMBARDERO', kit:'escudo · tira · bomba',
+              attackType:'bomb',  hasShield:true,  canThrow:true,  hasParry:false, hasDodge:false,
+              bombVx:3.2, bombVy:-4.6, bombGravity:0.3, blastRadius:30, bombKnock:10, bombCooldown:45 }
+  };
+  const CLASS_ORDER = ['glad','archer','bomber'];
+
   let p1, p2, state, winner, shakeT = 0, projectiles = [];
   let eggUntil = 0, eggCount = 0, eggLast = 0;   // easter egg (tecla 8 x3)
   let dogsGhost = false, eggG = 0, eggGLast = 0; // easter egg (tecla g x3 -> fantasmas)
   const BREEDS = ['Negro', 'Moteado', 'Salchicha'];
   const GHOST_MSG = ['¡Buuu!', '¡Uuuh!', '¡Fantasmal!', '¡Buu buu!'];
 
+  let selRed = 'glad', selBlue = 'glad';
   function reset() {
-    p1 = makeFighter({ name:'ROJO', pal:PAL_RED,  x:150, dir:+1,
+    p1 = makeFighter({ name:'ROJO', pal:PAL_RED,  x:150, dir:+1, cls:selRed,
       controls:{left:'a', right:'d', attack:'w', shield:'s', thrw:'q', parry:'e'} });
-    p2 = makeFighter({ name:'AZUL', pal:PAL_BLUE, x:330, dir:-1,
+    p2 = makeFighter({ name:'AZUL', pal:PAL_BLUE, x:330, dir:-1, cls:selBlue,
       controls:{left:'j', right:'l', attack:'i', shield:'k', thrw:'o', parry:'u'} });
     projectiles = [];
     state = 'ready'; winner = null;
