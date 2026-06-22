@@ -279,6 +279,7 @@
       if (k === f.controls.attack) tryAttack(f);
       if (k === f.controls.thrw)   tryThrow(f);
       if (k === f.controls.parry)  tryParry(f);
+      if (k === f.controls.shield) tryDodge(f);
     });
   });
   addEventListener('keyup', (e) => { down.delete(e.key.toLowerCase()); });
@@ -311,8 +312,18 @@
     f.attack = ATTACK_DUR; f.resolved = false; sfx('swing', 0.6);
   }
   function tryParry(f) {
+    if (!CLASSES[f.cls].hasParry) return;
     if (f.parry > 0 || f.parryCd > 0 || f.attack > 0 || f.cooldown > 0) return;
     f.parry = PARRY_WINDOW;
+  }
+  function tryDodge(f) {
+    const C = CLASSES[f.cls];
+    if (!C.hasDodge) return;
+    if (f.dash > 0 || f.dashCd > 0 || f.attack > 0) return;
+    f.dash = C.dashFrames; f.invuln = C.dashFrames;
+    f.dashDir = down.has(f.controls.right) ? 1 : down.has(f.controls.left) ? -1 : -f.dir;  // sin input: hacia atrás
+    sfx('swing', 0.4);
+    floatMsg(f, '¡ESQUIVE!');
   }
   function tryThrow(f) {
     if (!CLASSES[f.cls].canThrow) return;
@@ -414,13 +425,18 @@
     if (state === 'play') {
       f.shielding = f.hasShield && down.has(f.controls.shield) && f.attack === 0 && f.cooldown === 0 && f.parry === 0;
 
-      // puedes caminar con el escudo arriba (más lento); atacar/parry sí frenan el paso
-      if (f.attack === 0 && f.parry === 0) {
+      // caminar (con escudo: más lento); atacar/parry frenan el paso; el dash lo reemplaza
+      if (f.dash > 0) {
+        f.x += f.dashDir * speedOf(f) * CLASSES[f.cls].dashSpeedMult;
+        f.dash--; if (f.dash === 0) f.dashCd = CLASSES[f.cls].dashCooldown;
+      } else if (f.attack === 0 && f.parry === 0) {
         let sp = speedOf(f);
         if (f.shielding) sp *= 0.6;   // caminata defensiva, más lenta
         if (down.has(f.controls.left))  f.x -= sp;
         if (down.has(f.controls.right)) f.x += sp;
       }
+      if (f.invuln > 0) f.invuln--;
+      if (f.dashCd > 0) f.dashCd--;
 
       if (f.attack > 0) {
         f.attack--;
@@ -554,6 +570,7 @@
     const cx = Math.round(f.x), fy = GROUND_Y;
     const tint = f.flash > 0 && (f.flash % 2 === 0);
     const C = f.pal;
+    if (f.invuln > 0) ctx.globalAlpha = 0.45;   // semitransparente durante i-frames del esquive
     const skin  = tint ? '#fff' : C.skin;
     const main  = tint ? '#fff' : C.main;
     const metal = tint ? '#fff' : C.metal;
@@ -619,6 +636,7 @@
       ctx.strokeStyle = 'rgba(255,90,40,0.5)'; ctx.lineWidth = 1;
       ctx.strokeRect(cx-12, fy-66, 24, 66);
     }
+    ctx.globalAlpha = 1;
   }
 
   function drawProjectile(pr) {
