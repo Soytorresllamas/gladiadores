@@ -138,6 +138,23 @@
   function sfx(name, vol = 0.7) {
     try { const a = SND[name].cloneNode(true); a.volume = vol; a.play().catch(()=>{}); } catch (e) {}
   }
+  let actx = null;
+  function woof() {                                  // ladrido sintetizado (sin archivos)
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+      const t0 = actx.currentTime;
+      [[330,0],[185,0.09]].forEach(([fr,dt]) => {
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = 'square';
+        o.frequency.setValueAtTime(fr, t0+dt);
+        o.frequency.exponentialRampToValueAtTime(fr*0.55, t0+dt+0.08);
+        g.gain.setValueAtTime(0.16, t0+dt);
+        g.gain.exponentialRampToValueAtTime(0.001, t0+dt+0.12);
+        o.connect(g).connect(actx.destination); o.start(t0+dt); o.stop(t0+dt+0.13);
+      });
+    } catch (e) {}
+  }
 
   // ---------- Constantes ----------
   const GROUND_Y = 206;     // línea de pies de los gladiadores
@@ -217,7 +234,7 @@
             win:['¡GANAMOS!','¡Campeón Azul!','¡Guau guau guau!'] }
   };
   function makeDog(x, dir, pal, msgs, breed) {
-    return { x, dir, pal, msgs, breed, msg:'', msgUntil:0, nextAt: performance.now() + 1500 + Math.random()*2500 };
+    return { x, dir, pal, msgs, breed, msg:'', msgUntil:0, barkT:0, nextAt: performance.now() + 1500 + Math.random()*2500 };
   }
   let dogL, dogR;
   function initDogs() {
@@ -275,6 +292,7 @@
     }
     if (state === 'win')   { if (k === ' ' || k === 'enter') reset(); return; }
     down.add(k);
+    [p1, p2].forEach(f => konamiInput(f, k));
     [p1, p2].forEach(f => {
       if (k === f.controls.attack) tryAttack(f);
       if (k === f.controls.thrw)   tryThrow(f);
@@ -296,6 +314,32 @@
     unlockAudio();
   });
 
+  const KONAMI = f => [f.controls.left, f.controls.left, f.controls.right, f.controls.right, f.controls.shield, f.controls.attack];
+  function konamiInput(f, k) {
+    if (state !== 'play' || f.healUsed) return;
+    const seq = KONAMI(f), now = performance.now();
+    if (now - f.konamiLast > 1300) f.konami = 0;
+    f.konamiLast = now;
+    if (k === seq[f.konami]) {
+      f.konami++;
+      if (f.konami >= seq.length) { f.konami = 0; doHeal(f); }
+    } else {
+      f.konami = (k === seq[0]) ? 1 : 0;
+    }
+  }
+  function doHeal(f) {
+    f.healUsed = true;
+    const foe = (f === p1) ? p2 : p1;
+    barkDog(f);
+    if (foe.hits > 0) { foe.hits--; f.healFlash = 24; floatMsg(f, '+1 VIDA'); }
+    else { floatMsg(f, '¡SANO!'); }
+  }
+  function barkDog(f) {
+    const d = (f === p1) ? dogL : dogR;
+    const t = performance.now();
+    d.msg = '¡GUAU!'; d.msgUntil = t + 1800; d.nextAt = t + 3200; d.barkT = t + 600;
+    woof();
+  }
   function tryAttack(f) {
     if (f.cooldown > 0 || f.parry > 0 || f.attack > 0) return;
     const C = CLASSES[f.cls];
@@ -438,6 +482,7 @@
   function updateFighter(f, foe) {
     if (f.msgT > 0) f.msgT--;
     if (f.flash > 0) f.flash--;
+    if (f.healFlash > 0) f.healFlash--;
     if (f.knock !== 0) { f.x += f.knock; f.knock *= 0.78; if (Math.abs(f.knock) < 0.4) f.knock = 0; }
 
     if (state === 'play') {
@@ -601,11 +646,12 @@
   function drawFighter(f) {
     const cx = Math.round(f.x), fy = GROUND_Y;
     const tint = f.flash > 0 && (f.flash % 2 === 0);
+    const healTint = f.healFlash > 0 && (f.healFlash % 4 < 2);   // destello verde de curación
     const C = f.pal;
     if (f.invuln > 0) ctx.globalAlpha = 0.45;   // semitransparente durante i-frames del esquive
-    const skin  = tint ? '#fff' : C.skin;
-    const main  = tint ? '#fff' : C.main;
-    const metal = tint ? '#fff' : C.metal;
+    const skin  = healTint ? '#9cffb0' : tint ? '#fff' : C.skin;
+    const main  = healTint ? '#3fd06a' : tint ? '#fff' : C.main;
+    const metal = healTint ? '#9cffb0' : tint ? '#fff' : C.metal;
 
     // sombra de contacto (más marcada para que no "floten")
     ctx.fillStyle = 'rgba(0,0,0,0.32)';
@@ -765,12 +811,13 @@
     const cx = (opts.x != null ? opts.x : Math.round(d.x));
     const base = (opts.y != null ? opts.y : 252);
     const t = performance.now();
+    const hop = (t < (d.barkT || 0)) ? -Math.abs(Math.sin(t/40))*6 : 0;   // brinco al ladrar
     if (!dogsGhost) {                        // los fantasmas flotan, sin sombra
       ctx.fillStyle = 'rgba(0,0,0,0.30)';
       ctx.beginPath(); ctx.ellipse(cx, base+1, 12*scale, 3*scale, 0, 0, Math.PI*2); ctx.fill();
     }
     ctx.save();
-    ctx.translate(cx, base);
+    ctx.translate(cx, base + hop);
     ctx.scale(scale * d.dir, scale);         // espejo según dirección + escala
     if (dogsGhost) drawGhost(d, t); else drawBreed(d.breed, d, t);
     ctx.restore();
@@ -909,7 +956,7 @@
 
   function loop() {
     if (state === 'play') update();
-    else { [p1,p2].forEach(f => { if (f.msgT>0) f.msgT--; if (f.flash>0) f.flash--; }); if (shakeT>0) shakeT--; }
+    else { [p1,p2].forEach(f => { if (f.msgT>0) f.msgT--; if (f.flash>0) f.flash--; if (f.healFlash>0) f.healFlash--; }); if (shakeT>0) shakeT--; }
     updateDog(dogL); updateDog(dogR);
     syncBubbles();
     render();
