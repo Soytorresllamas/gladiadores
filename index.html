@@ -296,7 +296,18 @@
   });
 
   function tryAttack(f) {
-    if (f.attack > 0 || f.cooldown > 0 || f.shielding || f.parry > 0) return;
+    if (f.cooldown > 0 || f.parry > 0 || f.attack > 0) return;
+    const C = CLASSES[f.cls];
+    if (C.attackType === 'arrow') {
+      if (f.dash > 0) return;
+      f.windup = C.arrowWindup; f.attack = ATTACK_DUR; f.resolved = false; sfx('swing', 0.5);
+      return;
+    }
+    if (C.attackType === 'bomb') {
+      f.attack = ATTACK_DUR; f.resolved = false; sfx('swing', 0.7);
+      return;
+    }
+    if (f.shielding) return;                       // melee: no atacar con escudo arriba
     f.attack = ATTACK_DUR; f.resolved = false; sfx('swing', 0.6);
   }
   function tryParry(f) {
@@ -304,9 +315,10 @@
     f.parry = PARRY_WINDOW;
   }
   function tryThrow(f) {
+    if (!CLASSES[f.cls].canThrow) return;
     if (!f.hasShield || f.attack > 0 || f.cooldown > 0) return;
     f.hasShield = false; f.shielding = false;
-    projectiles.push({ x: f.x + f.dir*12, y: GROUND_Y - 34, dir: f.dir, owner: f, ang: 0 });
+    projectiles.push({ kind:'shield', x: f.x + f.dir*12, y: GROUND_Y - 34, dir: f.dir, owner: f, ang: 0 });
     sfx('swing', 0.8);
     floatMsg(f, '¡ESCUDO!');
   }
@@ -331,20 +343,31 @@
     if (att.hits >= WIN_HITS) { state = 'win'; winner = att; sfx('victory', 0.9); dogCheer(att, 'win'); }
   }
 
+  function cooldownOf(f) {
+    const C = CLASSES[f.cls];
+    return C.attackType === 'arrow' ? C.arrowCooldown
+         : C.attackType === 'bomb'  ? C.bombCooldown
+         : COOLDOWN;
+  }
+  function spawnArrow(f) {
+    const C = CLASSES[f.cls];
+    projectiles.push({ kind:'arrow', x:f.x + f.dir*16, y:GROUND_Y - 34,
+      vx:f.dir*C.arrowSpeed, dir:f.dir, owner:f });
+  }
   function resolveAttack(att, def) {
+    const C = CLASSES[att.cls];
+    if (C.attackType === 'arrow') { spawnArrow(att); return; }
+    if (C.attackType === 'bomb')  { spawnBomb(att);  return; }
     const reach = REACH_BASE * att.swordLvl;
     const gap = Math.abs(att.x - def.x) - FW;
     if (gap > reach) { registerMiss(att); return; }     // al aire
     if (def.parry > 0) {                                 // ¡PARRY! regresa el golpe
-      sfx('block', 0.85);
-      floatMsg(def, '¡PARRY!');
-      scoreHit(def, att, '¡REGRESADA!');
-      def.parry = 0; def.parryCd = PARRY_CD;
-      return;
+      sfx('block', 0.85); floatMsg(def, '¡PARRY!'); scoreHit(def, att, '¡REGRESADA!');
+      def.parry = 0; def.parryCd = PARRY_CD; return;
     }
+    if (def.invuln > 0) { registerMiss(att); return; }   // esquivó (dash del arquero)
     if (def.shielding) {                                 // bloqueado (cuenta como fallo)
-      sfx('block', 0.8); def.flash = 4; registerMiss(att); floatMsg(def, 'BLOQUEO');
-      return;
+      sfx('block', 0.8); def.flash = 4; registerMiss(att); floatMsg(def, 'BLOQUEO'); return;
     }
     sfx('hit', 0.85); scoreHit(att, def);                // conecta
   }
@@ -352,11 +375,30 @@
   function updateProjectiles() {
     for (let i = projectiles.length - 1; i >= 0; i--) {
       const pr = projectiles[i];
-      pr.x += pr.dir * THROW_SPEED; pr.ang += 0.5;
       const foe = (pr.owner === p1) ? p2 : p1;
-      if (Math.abs(pr.x - foe.x) <= FW/2 + 3) {          // golpe garantizado
-        sfx('hit', 0.85);
-        scoreHit(pr.owner, foe, '¡ESCUDAZO!');
+
+      if (pr.kind === 'arrow') {
+        pr.x += pr.vx;
+        if (Math.abs(pr.x - foe.x) <= FW/2 + 3) {
+          if (foe.invuln > 0) { /* la atraviesa */ }
+          else if (foe.parry > 0) { sfx('block',0.85); floatMsg(foe,'¡PARRY!'); scoreHit(foe, pr.owner, '¡REGRESADA!'); foe.parry=0; foe.parryCd=PARRY_CD; projectiles.splice(i,1); continue; }
+          else if (foe.shielding) { sfx('block',0.8); foe.flash=4; registerMiss(pr.owner); floatMsg(foe,'BLOQUEO'); projectiles.splice(i,1); continue; }
+          else { sfx('hit',0.8); scoreHit(pr.owner, foe, '¡FLECHAZO!'); projectiles.splice(i,1); continue; }
+        }
+        if (pr.x < -24 || pr.x > W + 24) projectiles.splice(i,1);
+        continue;
+      }
+
+      if (pr.kind === 'bomb') {                    // cuerpo real en Task 5
+        if (typeof updateBomb === 'function') { updateBomb(pr, foe, i); }
+        continue;
+      }
+
+      // kind === 'shield' (escudo lanzado)
+      pr.x += pr.dir * THROW_SPEED; pr.ang += 0.5;
+      if (Math.abs(pr.x - foe.x) <= FW/2 + 3) {
+        if (foe.invuln > 0) { projectiles.splice(i, 1); continue; }
+        sfx('hit', 0.85); scoreHit(pr.owner, foe, '¡ESCUDAZO!');
         projectiles.splice(i, 1); continue;
       }
       if (pr.x < -24 || pr.x > W + 24) projectiles.splice(i, 1);
@@ -382,8 +424,9 @@
 
       if (f.attack > 0) {
         f.attack--;
+        if (f.windup > 0) f.windup--;
         if (!f.resolved && f.attack <= STRIKE_AT) { resolveAttack(f, foe); f.resolved = true; }
-        if (f.attack === 0) f.cooldown = COOLDOWN;
+        if (f.attack === 0) f.cooldown = cooldownOf(f);
       } else if (f.cooldown > 0) f.cooldown--;
 
       if (f.parry > 0) { f.parry--; if (f.parry === 0) f.parryCd = PARRY_CD; }
@@ -481,6 +524,21 @@
     px(handX - 4, handY - 1, 8, 2, '#caa54a');
   }
 
+  function drawBow(f, hx, hy) {
+    ctx.save(); ctx.translate(hx, hy); ctx.scale(f.dir, 1);
+    ctx.strokeStyle = '#8a5a1f'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(2, 0, 12, -Math.PI*0.62, Math.PI*0.62); ctx.stroke();
+    const drawn = (f.attack > 0 && f.windup > 0) ? 5 : 1;       // cuerda tensada al cargar
+    ctx.strokeStyle = '#efe7cf'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(2 + 12*Math.cos(-Math.PI*0.62), 12*Math.sin(-Math.PI*0.62));
+    ctx.lineTo(2 - drawn, 0);
+    ctx.lineTo(2 + 12*Math.cos(Math.PI*0.62), 12*Math.sin(Math.PI*0.62));
+    ctx.stroke();
+    if (f.attack > 0 && f.windup > 0) { ctx.fillStyle = '#6b4a17'; ctx.fillRect(2 - drawn, -1, 12, 2); }
+    ctx.restore();
+    px(hx - 2, hy - 1, 4, 4, f.pal.skin);                       // mano
+  }
   function drawShield(f, cx, frontX) {
     if (!f.hasShield) return;
     const sx = f.shielding ? frontX + f.dir*3 : cx - f.dir*4;
@@ -541,7 +599,10 @@
       handY = shoulderY - 2 - Math.sin(p*Math.PI) * 4; // la mano sube un poco en el chop
     }
     px(cx + (f.dir>0?6:-6-3), shoulderY, 9, 4, skin);
-    drawSword(f, handX, handY);
+    const at = CLASSES[f.cls].attackType;
+    if (at === 'arrow') drawBow(f, handX, handY);
+    else if (at === 'bomb' && typeof drawBombHand === 'function') drawBombHand(f, handX, handY);
+    else drawSword(f, handX, handY);
 
     // destello de parry
     if (f.parry > 0) {
@@ -562,6 +623,24 @@
 
   function drawProjectile(pr) {
     const pal = pr.owner.pal;
+    if (pr.kind === 'arrow') {
+      ctx.save(); ctx.translate(pr.x, pr.y);
+      ctx.fillStyle = '#6b4a17'; ctx.fillRect(-7*pr.dir, -1, 14, 2);          // asta
+      ctx.fillStyle = '#dadada';
+      ctx.beginPath(); ctx.moveTo(7*pr.dir, -3); ctx.lineTo(11*pr.dir, 0); ctx.lineTo(7*pr.dir, 3); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = pal.main; ctx.fillRect(-7*pr.dir - (pr.dir>0?0:2), -3, 2, 6);  // plumas
+      ctx.restore();
+      return;
+    }
+    if (pr.kind === 'bomb') {
+      ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(pr.ang || 0);
+      ctx.fillStyle = '#1c1c1c'; ctx.beginPath(); ctx.arc(0,0,5,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#3a3a3a'; ctx.beginPath(); ctx.arc(-1.5,-1.5,1.6,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#caa54a'; ctx.fillRect(-1,-8,2,3);
+      ctx.fillStyle = '#ff7a2a'; ctx.fillRect(0,-9,2,2);
+      ctx.restore();
+      return;
+    }
     ctx.save();
     ctx.translate(pr.x, pr.y); ctx.rotate(pr.ang);
     px(-4, -7, 8, 14, pal.metalD);
