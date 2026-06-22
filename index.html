@@ -208,6 +208,7 @@
   let p1, p2, state, winner, shakeT = 0, projectiles = [], blasts = [];
   let eggUntil = 0, eggCount = 0, eggLast = 0;   // easter egg (tecla 8 x3)
   let dogsGhost = false, eggG = 0, eggGLast = 0; // easter egg (tecla g x3 -> fantasmas)
+  let eggP = 0, eggPLast = 0, stampede = [];     // easter egg (tecla p x3 -> invasión de perritos)
   const BREEDS = ['Negro', 'Moteado', 'Salchicha'];
   const GHOST_MSG = ['¡Buuu!', '¡Uuuh!', '¡Fantasmal!', '¡Buu buu!'];
 
@@ -283,6 +284,13 @@
       eggG = (now - eggGLast < 1300) ? eggG + 1 : 1;
       eggGLast = now;
       if (eggG >= 3) { dogsGhost = !dogsGhost; eggG = 0; }
+    }
+    // easter egg: aprieta "p" tres veces -> invasión de perritos
+    if (k === 'p') {
+      const now = performance.now();
+      eggP = (now - eggPLast < 1300) ? eggP + 1 : 1;
+      eggPLast = now;
+      if (eggP >= 3) { startStampede(); eggP = 0; }
     }
     if (state === 'ready') {
       if (k === 'a' || k === 'd') selRed  = cycleClass(selRed,  k === 'd' ? 1 : -1);
@@ -826,6 +834,33 @@
   function drawDogs() {
     drawDog(dogL); drawDog(dogR);
   }
+  function startStampede() {
+    stampede = [];
+    for (let i = 0; i < 12; i++) {
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      stampede.push({
+        x: dir > 0 ? -20 - Math.random()*220 : W + 20 + Math.random()*220,
+        y: 150 + Math.random()*(H - 162),
+        dir, sp: 2.2 + Math.random()*1.8,
+        breed: (Math.random()*BREEDS.length)|0,
+        pal: Math.random() < 0.5 ? PAL_RED : PAL_BLUE,
+        bob: Math.random()*6.28, scale: 0.8 + Math.random()*0.5
+      });
+    }
+  }
+  function updateStampede() {
+    for (let i = stampede.length - 1; i >= 0; i--) {
+      const s = stampede[i]; s.x += s.dir * s.sp;
+      if ((s.dir > 0 && s.x > W + 40) || (s.dir < 0 && s.x < -40)) stampede.splice(i, 1);  // solo al salir por el lado opuesto
+    }
+  }
+  function drawStampede() {
+    const t = performance.now();
+    stampede.forEach(s => {
+      const yy = s.y + Math.sin(t/90 + s.bob)*2;
+      drawDog({ x:s.x, dir:s.dir, pal:s.pal, breed:s.breed }, { x:s.x, y:yy, scale:s.scale });
+    });
+  }
 
   // globos de diálogo como overlay HTML (texto nítido, no pixelado)
   function syncBubbles() {
@@ -929,6 +964,7 @@
     blasts.forEach(drawBlast);
     if (state !== 'ready') drawDogs();   // perritos de esquina solo en juego/victoria
     drawVignette();
+    drawStampede();
     ctx.restore();
     drawHUD();
     if (state === 'ready') drawReady();
@@ -958,6 +994,7 @@
     if (state === 'play') update();
     else { [p1,p2].forEach(f => { if (f.msgT>0) f.msgT--; if (f.flash>0) f.flash--; if (f.healFlash>0) f.healFlash--; }); if (shakeT>0) shakeT--; }
     updateDog(dogL); updateDog(dogR);
+    updateStampede();
     syncBubbles();
     render();
     requestAnimationFrame(loop);
