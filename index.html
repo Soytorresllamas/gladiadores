@@ -113,7 +113,7 @@
         </div>
       </div>
     </div>
-    <div id="rules">Gana el primero en conectar <b>3 espadazos</b>. Tira el escudo = golpe seguro pero quedas sin defensa · el <b>parry</b> a tiempo regresa el golpe · 3 fallos seguidos te frenan · 2 aciertos agrandan tu espada.<br><b>Clases:</b> en la pantalla de inicio cada quien elige <b>Gladiador</b>, <b>Arquero</b> o <b>Bombardero</b> con sus teclas de mover; los botones de escudo y parry cambian de función según la clase.</div>
+    <div id="rules">Gana el primero en conectar <b>3 espadazos</b>. Tira el escudo = golpe seguro pero quedas sin defensa · el <b>parry</b> a tiempo regresa el golpe · 3 fallos seguidos te frenan · 2 aciertos agrandan tu espada.<br><b>Clases:</b> en la pantalla de inicio cada quien elige <b>Gladiador</b>, <b>Arquero</b> o <b>Bombardero</b> con sus teclas de mover; los botones de escudo y parry cambian de función según la clase. Cambia el <b>escenario</b> con <b>1 / 2 / 3</b>.</div>
     <div id="sig">Diseñado, ideado y en parte programado por <b>8-bits</b></div>
   </div>
 
@@ -213,6 +213,8 @@
   const GHOST_MSG = ['¡Buuu!', '¡Uuuh!', '¡Fantasmal!', '¡Buu buu!'];
 
   let selRed = 'glad', selBlue = 'glad';
+  const SCENARIOS = ['Coliseo', 'Coliseo nocturno', 'Western'];
+  let scenario = 0;
   function reset() {
     p1 = makeFighter({ name:'ROJO', pal:PAL_RED,  x:150, dir:+1, cls:selRed,
       controls:{left:'a', right:'d', attack:'w', shield:'s', thrw:'q', parry:'e'} });
@@ -295,6 +297,7 @@
     if (state === 'ready') {
       if (k === 'a' || k === 'd') selRed  = cycleClass(selRed,  k === 'd' ? 1 : -1);
       if (k === 'j' || k === 'l') selBlue = cycleClass(selBlue, k === 'l' ? 1 : -1);
+      if (k === '1' || k === '2' || k === '3') scenario = (+k) - 1;
       if (k === ' ' || k === 'enter') startMatch();
       return;
     }
@@ -544,19 +547,27 @@
   }
 
   function drawBackground() {
-    const sky = ctx.createLinearGradient(0,0,0,H);
-    sky.addColorStop(0, '#9cc2e6'); sky.addColorStop(1, '#e9d9a8');
-    ctx.fillStyle = sky; ctx.fillRect(0,0,W,150);
+    if (scenario === 2) { drawWestern(); return; }
+    const night = (scenario === 1);
 
-    const rings = [ {y:28,h:30,c:'#7d6a4a'}, {y:58,h:30,c:'#8f7c58'}, {y:88,h:34,c:'#a08a63'} ];
+    const sky = ctx.createLinearGradient(0,0,0,H);
+    if (night) { sky.addColorStop(0,'#0c1430'); sky.addColorStop(1,'#3b2f50'); }
+    else       { sky.addColorStop(0,'#9cc2e6'); sky.addColorStop(1,'#e9d9a8'); }
+    ctx.fillStyle = sky; ctx.fillRect(0,0,W,150);
+    if (night) drawNightSky();
+
+    const rings = night
+      ? [ {y:28,h:30,c:'#2b2540'}, {y:58,h:30,c:'#342c49'}, {y:88,h:34,c:'#3d3354'} ]
+      : [ {y:28,h:30,c:'#7d6a4a'}, {y:58,h:30,c:'#8f7c58'}, {y:88,h:34,c:'#a08a63'} ];
     rings.forEach((r, ri) => {
       px(0, r.y, W, r.h, r.c);
       for (let x = 8; x < W; x += 34) {
-        px(x, r.y + 4, 22, r.h - 8, '#3a2f1d');
-        px(x + 3, r.y + 7, 16, r.h - 12, ri===2 ? '#241a0c' : '#4a3c25');
+        px(x, r.y + 4, 22, r.h - 8, night ? '#181226' : '#3a2f1d');
+        px(x + 3, r.y + 7, 16, r.h - 12, ri===2 ? (night?'#100b1c':'#241a0c') : (night?'#241c38':'#4a3c25'));
       }
       if (ri < 2) for (let x = 4; x < W; x += 6) {
-        const c = ['#caa','#ac9','#9ab','#cb9','#bbb'][(x+ri)%5];
+        const c = night ? ['#5a5170','#6a4a6a','#4a5a7a','#6a5a7a','#787088'][(x+ri)%5]
+                        : ['#caa','#ac9','#9ab','#cb9','#bbb'][(x+ri)%5];
         px(x, r.y + 2 + ((x*7+ri*3)%4), 3, 3, c);
       }
     });
@@ -564,17 +575,66 @@
     // estandartes de equipo colgando del muro
     drawBanner(64, PAL_RED);
     drawBanner(W - 64, PAL_BLUE);
+    if (night) { drawTorch(30, 92); drawTorch(W/2, 92); drawTorch(W-30, 92); }
 
-    px(0, 120, W, 14, '#4a3a20');
-    for (let x = 0; x < W; x += 16) px(x, 120, 2, 14, '#2c2110');
+    px(0, 120, W, 14, night ? '#241c30' : '#4a3a20');
+    for (let x = 0; x < W; x += 16) px(x, 120, 2, 14, night ? '#140f1e' : '#2c2110');
 
     // arena (tierra apisonada oscura para que resalten las piernas claras)
     const sand = ctx.createLinearGradient(0,134,0,H);
-    sand.addColorStop(0, '#8a6736'); sand.addColorStop(1, '#523c20');
+    if (night) { sand.addColorStop(0,'#4a3c2c'); sand.addColorStop(1,'#241c16'); }
+    else       { sand.addColorStop(0,'#8a6736'); sand.addColorStop(1,'#523c20'); }
     ctx.fillStyle = sand; ctx.fillRect(0,134,W,H-134);
-    ctx.fillStyle = 'rgba(214,184,120,0.16)';   // grano claro
+    ctx.fillStyle = night ? 'rgba(190,180,220,0.10)' : 'rgba(214,184,120,0.16)';
     for (let i = 0; i < 46; i++) ctx.fillRect((i*53 % W), 150 + (i*37 % (H-150)), 6, 2);
     px(W/2 - 1, 134, 2, H-134, 'rgba(28,18,8,0.38)');  // surco central
+  }
+  function drawNightSky() {
+    ctx.fillStyle = '#fdf6d0';
+    for (let i = 0; i < 42; i++) {
+      const x = (i*97 + 13) % W, y = (i*53 + 7) % 116;
+      const tw = ((Math.floor(performance.now()/420) + i) % 5) === 0 ? 2 : 1;
+      ctx.fillRect(x, y, tw, tw);
+    }
+    ctx.fillStyle = '#f5efc8';
+    ctx.beginPath(); ctx.arc(W-70, 36, 13, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#15203c';
+    ctx.beginPath(); ctx.arc(W-76, 32, 12, 0, Math.PI*2); ctx.fill();
+  }
+  function drawTorch(x, y) {
+    px(x-1, y, 3, 16, '#5a3a18');
+    const f = Math.sin(performance.now()/90 + x) * 1.2;
+    ctx.globalAlpha = 0.12; ctx.fillStyle = '#ffb43a';
+    ctx.beginPath(); ctx.arc(x+0.5, y-3, 16, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ff9a2a';
+    ctx.beginPath(); ctx.ellipse(x+0.5, y-3+f, 4, 7, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#ffe27a';
+    ctx.beginPath(); ctx.ellipse(x+0.5, y-2+f, 2, 4, 0, 0, Math.PI*2); ctx.fill();
+  }
+  function drawWestern() {
+    const sky = ctx.createLinearGradient(0,0,0,134);
+    sky.addColorStop(0,'#e9863a'); sky.addColorStop(0.6,'#f3b35e'); sky.addColorStop(1,'#f8dca2');
+    ctx.fillStyle = sky; ctx.fillRect(0,0,W,134);
+    ctx.fillStyle = '#ffe9ad';
+    ctx.beginPath(); ctx.arc(W/2, 120, 24, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 0.22; ctx.beginPath(); ctx.arc(W/2, 120, 36, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1;
+    const mesa = (x,w,h,c) => { px(x, 134-h, w, h, c); px(x+3, 134-h-4, w-6, 4, c); };
+    mesa(30,76,40,'#90492b'); mesa(150,54,30,'#a35836'); mesa(290,100,48,'#7b3e25'); mesa(424,50,26,'#a35836');
+    px(70,28,52,5,'rgba(255,242,214,0.5)'); px(250,20,74,5,'rgba(255,242,214,0.45)');   // nubes
+    px(0,128,W,5,'#6b4a2a'); for (let x = 6; x < W; x += 22) px(x,116,4,17,'#7c5832');   // cerca
+    drawCactus(22,134); drawCactus(W-26,134);
+    const dirt = ctx.createLinearGradient(0,134,0,H);
+    dirt.addColorStop(0,'#c89b5d'); dirt.addColorStop(1,'#8a6336');
+    ctx.fillStyle = dirt; ctx.fillRect(0,134,W,H-134);
+    ctx.fillStyle = 'rgba(108,74,38,0.28)';
+    for (let i = 0; i < 40; i++) ctx.fillRect((i*61 % W), 148 + (i*43 % (H-148)), 4, 2);
+    px(W/2 - 1, 134, 2, H-134, 'rgba(80,50,24,0.35)');
+  }
+  function drawCactus(x, baseY) {
+    const g = '#3f7d3a', gd = '#2c5a2a';
+    px(x-2, baseY-32, 5, 32, g); px(x-2, baseY-32, 2, 32, gd);   // tronco
+    px(x-8, baseY-20, 6, 4, g);  px(x-8, baseY-28, 4, 12, g);    // brazo izquierdo
+    px(x+3, baseY-24, 6, 4, g);  px(x+7, baseY-34, 4, 14, g);    // brazo derecho
   }
 
   function drawBanner(x, pal) {
@@ -913,11 +973,13 @@
     ctx.textAlign = 'center';
     ctx.fillStyle = '#e8c66a'; ctx.font = 'bold 21px "Courier New", monospace'; ctx.fillText('⚔ GLADIADORES ⚔', W/2, 40);
     ctx.fillStyle = '#c9b48a'; ctx.font = '8px "Courier New", monospace';
-    ctx.fillText('elige clase con tus teclas de mover · perrito con click', W/2, 56);
+    ctx.fillText('clase: teclas de mover  ·  perrito: click', W/2, 52);
+    ctx.fillStyle = '#e8c66a'; ctx.font = 'bold 8px "Courier New", monospace';
+    ctx.fillText('escenario (1·2·3):  ‹ ' + SCENARIOS[scenario] + ' ›', W/2, 63);
 
     // panel
-    ctx.fillStyle = 'rgba(20,14,6,0.85)'; roundRect(40, 66, W-80, 150, 8); ctx.fill();
-    ctx.strokeStyle = '#6b4a17'; ctx.lineWidth = 1; roundRect(40, 66, W-80, 150, 8); ctx.stroke();
+    ctx.fillStyle = 'rgba(20,14,6,0.85)'; roundRect(40, 70, W-80, 146, 8); ctx.fill();
+    ctx.strokeStyle = '#6b4a17'; ctx.lineWidth = 1; roundRect(40, 70, W-80, 146, 8); ctx.stroke();
 
     const sides = [
       { x:W*0.30, sel:selRed,  pal:PAL_RED,  lbl:'ROJO', dog:dogL, keys:'A / D' },
