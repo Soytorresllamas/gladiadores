@@ -38,8 +38,7 @@
   }
   #wrap { text-align: center; }
   canvas {
-    image-rendering: pixelated;
-    image-rendering: crisp-edges;
+    image-rendering: auto;
     width: min(96vw, 960px);
     height: auto;
     border: 4px solid #6b4a17;
@@ -122,8 +121,10 @@
   "use strict";
   const cv = document.getElementById('game');
   const ctx = cv.getContext('2d');
-  ctx.imageSmoothingEnabled = false;
-  const W = cv.width, H = cv.height;
+  const W = 480, H = 270;
+  const SCALE = 3;                          // resolución interna aumentada (supersampling) para suavizar
+  cv.width = W * SCALE; cv.height = H * SCALE;
+  ctx.imageSmoothingEnabled = true;
   const bubbleEl = { L: document.getElementById('bubbleL'), R: document.getElementById('bubbleR') };
 
   // ---------- Audio ----------
@@ -1030,6 +1031,7 @@
   }
 
   function render() {
+    ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);   // dibuja a mayor resolución interna
     ctx.save();
     if (shakeT > 0) ctx.translate((Math.random()-0.5)*4, (Math.random()-0.5)*4);
     drawBackground();
