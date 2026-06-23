@@ -173,7 +173,7 @@
   const PARRY_WINDOW = 12;  // frames activos de parry
   const PARRY_CD = 26;      // recuperación tras parry
   const THROW_SPEED = 6;    // px/frame del escudo lanzado
-  const JUMP_V = 6, JUMP_GRAV = 0.45;   // impulso y gravedad del salto
+  const JUMP_V = 8, JUMP_GRAV = 0.45;   // impulso y gravedad del salto (más alto)
 
   function makeFighter(o) {
     const cls = o.cls || 'glad';
@@ -733,7 +733,7 @@
     const metal = healTint ? '#9cffb0' : tint ? '#fff' : C.metal;
 
     // sombra de contacto en el piso (se achica y aclara al saltar)
-    const shf = 1 - Math.min(f.jumpY, 45) / 64;
+    const shf = 1 - Math.min(f.jumpY, 72) / 96;
     ctx.fillStyle = 'rgba(0,0,0,' + (0.32 * shf).toFixed(3) + ')';
     ctx.beginPath(); ctx.ellipse(cx, GROUND_Y, 13 * shf, 3.5 * shf, 0, 0, Math.PI*2); ctx.fill();
 
