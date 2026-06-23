@@ -113,7 +113,7 @@
         </div>
       </div>
     </div>
-    <div id="rules">Gana el primero en conectar <b>3 espadazos</b>. Tira el escudo = golpe seguro pero quedas sin defensa · el <b>parry</b> a tiempo regresa el golpe · 3 fallos seguidos te frenan · 2 aciertos agrandan tu espada.<br><b>Clases:</b> en la pantalla de inicio cada quien elige <b>Gladiador</b>, <b>Arquero</b> o <b>Bombardero</b> con sus teclas de mover; los botones de escudo y parry cambian de función según la clase. Cambia el <b>escenario</b> con <b>1 / 2 / 3</b>.<br><b>Salta</b> con <b>X</b> (Rojo) / <b>M</b> (Azul) para esquivar flechas, escudos lanzados y bombas.</div>
+    <div id="rules">Gana el primero en conectar <b>3 espadazos</b>. Tira el escudo = golpe seguro pero quedas sin defensa · el <b>parry</b> a tiempo regresa el golpe · 3 fallos seguidos te frenan · 2 aciertos agrandan tu espada.<br><b>Clases:</b> en la pantalla de inicio cada quien elige <b>Gladiador</b>, <b>Arquero</b> o <b>Bombardero</b> con sus teclas de mover; los botones de escudo y parry cambian de función según la clase. Cambia el <b>escenario</b> con <b>1 / 2 / 3</b>.<br><b>Salta</b> con <b>C</b> (Rojo) / <b>N</b> (Azul) para esquivar flechas, escudos lanzados y bombas.</div>
     <div id="sig">Diseñado, ideado y en parte programado por <b>8-bits</b></div>
   </div>
 
@@ -218,9 +218,9 @@
   let scenario = 0;
   function reset() {
     p1 = makeFighter({ name:'ROJO', pal:PAL_RED,  x:150, dir:+1, cls:selRed,
-      controls:{left:'a', right:'d', attack:'w', shield:'s', thrw:'q', parry:'e', jump:'x'} });
+      controls:{left:'a', right:'d', attack:'w', shield:'s', thrw:'q', parry:'e', jump:'c'} });
     p2 = makeFighter({ name:'AZUL', pal:PAL_BLUE, x:330, dir:-1, cls:selBlue,
-      controls:{left:'j', right:'l', attack:'i', shield:'k', thrw:'o', parry:'u', jump:'m'} });
+      controls:{left:'j', right:'l', attack:'i', shield:'k', thrw:'o', parry:'u', jump:'n'} });
     projectiles = []; blasts = [];
     state = 'ready'; winner = null;
   }
@@ -268,7 +268,7 @@
 
   // ---------- Entrada ----------
   const down = new Set();
-  const GAME_KEYS = new Set(['a','d','w','s','q','e','j','l','i','k','o','u','x','m',' ','enter']);
+  const GAME_KEYS = new Set(['a','d','w','s','q','e','j','l','i','k','o','u','c','n',' ','enter']);
   addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
     if (GAME_KEYS.has(k)) e.preventDefault();
@@ -985,7 +985,7 @@
     ctx.textAlign = 'center';
     ctx.fillStyle = '#e8c66a'; ctx.font = 'bold 21px "Courier New", monospace'; ctx.fillText('⚔ GLADIADORES ⚔', W/2, 40);
     ctx.fillStyle = '#c9b48a'; ctx.font = '8px "Courier New", monospace';
-    ctx.fillText('clase: mover  ·  perrito: click  ·  salta: X / M', W/2, 52);
+    ctx.fillText('clase: mover  ·  perrito: click  ·  salta: C / N', W/2, 52);
     ctx.fillStyle = '#e8c66a'; ctx.font = 'bold 8px "Courier New", monospace';
     ctx.fillText('escenario (1·2·3):  ‹ ' + SCENARIOS[scenario] + ' ›', W/2, 63);
 
