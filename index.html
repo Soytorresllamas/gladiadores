@@ -64,20 +64,71 @@
   #bubbleL { left: 11%; border-color: #b5341f; }
   #bubbleR { left: 89%; border-color: #2f63b8; }
 
-  #controls { margin: 16px auto 4px; display: flex; gap: 34px; justify-content: center; flex-wrap: wrap; }
+  /* ----- Panel de indicaciones ----- */
+  #guide {
+    display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; align-items: stretch;
+    width: min(96vw, 960px); margin: 20px auto 4px; padding: 0 6px;
+  }
+  .panel {
+    flex: 1 1 300px;
+    background: linear-gradient(180deg, rgba(58,42,18,0.35), rgba(20,14,6,0.5)), #1d1408;
+    border: 2px solid #6b4a17; border-radius: 9px;
+    box-shadow: 0 3px 0 #130d04, inset 0 1px 0 rgba(232,198,106,0.12);
+    padding: 13px 16px 16px; animation: rise .5s ease both;
+  }
+  .panel:nth-child(2) { animation-delay: .09s; }
+  .phead {
+    margin: 0 0 12px; font-size: 10.5px; font-weight: bold; letter-spacing: 3px;
+    text-transform: uppercase; color: #e8c66a; text-shadow: 1px 1px 0 #4a300a;
+    display: flex; align-items: center; gap: 9px; justify-content: center;
+  }
+  .phead::before, .phead::after {
+    content: ''; height: 2px; flex: 1; max-width: 44px; border-radius: 2px;
+    background: linear-gradient(90deg, transparent, #6b4a17);
+  }
+  .phead::after { transform: scaleX(-1); }
+
+  #controls { display: flex; gap: 26px; justify-content: center; flex-wrap: wrap; }
   .player { text-align: center; }
-  .ptitle { font-size: 12px; font-weight: bold; letter-spacing: 1px; margin-bottom: 8px; }
-  .kb { display: grid; grid-template-columns: repeat(3, 56px); gap: 6px; }
-  .cap { background: #2a1d0a; border: 1px solid #6b4a17; border-radius: 5px;
-         padding: 4px 2px 5px; display: flex; flex-direction: column; align-items: center;
-         box-shadow: 0 2px 0 #160f05; }
+  .ptitle { font-size: 11px; font-weight: bold; letter-spacing: 2px; margin-bottom: 9px; }
+  .ptitle.red  { color: #ef5a44; }
+  .ptitle.blue { color: #4aa3e8; }
+  .kb { display: grid; grid-template-columns: repeat(3, 54px); gap: 6px; }
+  .cap {
+    background: linear-gradient(180deg, #34250f, #221805);
+    border: 1px solid #6b4a17; border-radius: 6px; padding: 5px 2px 6px; min-height: 37px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    box-shadow: 0 2px 0 #130d04; transition: transform .07s ease, box-shadow .07s ease;
+  }
+  .cap:hover { transform: translateY(1px); box-shadow: 0 1px 0 #130d04; }
   .cap b { color: #f4e4c1; font-size: 15px; line-height: 1; }
-  .cap i { color: #c9b48a; font-size: 8.5px; font-style: normal; margin-top: 3px; }
+  .cap i { color: #c9b48a; font-size: 8px; font-style: normal; margin-top: 4px; letter-spacing: .3px; }
   .cap.move b { color: #e8c66a; }
-  #rules { margin: 8px auto 4px; font-size: 11.5px; line-height: 1.6; color: #9c855c; max-width: 780px; }
+  .jump {
+    display: flex; align-items: center; gap: 7px; width: fit-content; margin: 8px auto 0;
+    background: linear-gradient(180deg, #3c2c12, #261a06);
+    border: 1px solid #8a6420; border-radius: 6px; padding: 5px 13px 5px 9px;
+    box-shadow: 0 2px 0 #130d04; transition: transform .07s ease, box-shadow .07s ease;
+  }
+  .jump:hover { transform: translateY(1px); box-shadow: 0 1px 0 #130d04; }
+  .jump b { color: #ffd27a; font-size: 14px; }
+  .jump i { color: #e8c66a; font-size: 9px; font-style: normal; letter-spacing: 1.5px; }
+  .note { margin: 12px auto 0; font-size: 9.5px; line-height: 1.55; color: #9c855c; max-width: 380px; text-align: center; }
+  .note b { color: #d9b86a; }
+
+  #rules { list-style: none; margin: 0; padding: 0; }
+  #rules li {
+    font-size: 11px; line-height: 1.4; color: #c2a979; padding: 6px 0 6px 19px;
+    position: relative; border-bottom: 1px dashed rgba(107,74,23,0.35);
+  }
+  #rules li:last-child { border-bottom: none; }
+  #rules li::before { content: '⚔'; position: absolute; left: 0; top: 6px; color: #8a6a28; font-size: 10px; }
   #rules b { color: #e8c66a; }
-  #sig { margin: 6px auto 18px; font-size: 12px; color: #8a734a; letter-spacing: 1px; }
+
+  #sig { margin: 14px auto 20px; font-size: 11px; color: #8a734a; letter-spacing: 1.5px; text-align: center; }
   #sig b { color: #e8c66a; }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 </style>
 </head>
 <body>
@@ -88,31 +139,50 @@
       <div id="bubbleL" class="dogbubble"></div>
       <div id="bubbleR" class="dogbubble"></div>
     </div>
-    <div id="controls">
-      <div class="player">
-        <div class="ptitle" style="color:#e23b2a">● ROJO — lado izquierdo</div>
-        <div class="kb">
-          <div class="cap"><b>Q</b><i>tira escudo</i></div>
-          <div class="cap"><b>W</b><i>espadazo</i></div>
-          <div class="cap"><b>E</b><i>parry</i></div>
-          <div class="cap move"><b>A</b><i>◄ mover</i></div>
-          <div class="cap"><b>S</b><i>escudo</i></div>
-          <div class="cap move"><b>D</b><i>mover ►</i></div>
+    <div id="guide">
+      <section class="panel">
+        <div class="phead">Controles</div>
+        <div id="controls">
+          <div class="player">
+            <div class="ptitle red">● ROJO</div>
+            <div class="kb">
+              <div class="cap"><b>Q</b><i>tira escudo</i></div>
+              <div class="cap"><b>W</b><i>ataque</i></div>
+              <div class="cap"><b>E</b><i>parry</i></div>
+              <div class="cap move"><b>A</b><i>◄ mover</i></div>
+              <div class="cap"><b>S</b><i>escudo</i></div>
+              <div class="cap move"><b>D</b><i>mover ►</i></div>
+            </div>
+            <div class="jump"><b>C</b><i>SALTAR</i></div>
+          </div>
+          <div class="player">
+            <div class="ptitle blue">● AZUL</div>
+            <div class="kb">
+              <div class="cap"><b>U</b><i>parry</i></div>
+              <div class="cap"><b>I</b><i>ataque</i></div>
+              <div class="cap"><b>O</b><i>tira escudo</i></div>
+              <div class="cap move"><b>J</b><i>◄ mover</i></div>
+              <div class="cap"><b>K</b><i>escudo</i></div>
+              <div class="cap move"><b>L</b><i>mover ►</i></div>
+            </div>
+            <div class="jump"><b>N</b><i>SALTAR</i></div>
+          </div>
         </div>
-      </div>
-      <div class="player">
-        <div class="ptitle" style="color:#37a0e2">● AZUL — lado derecho</div>
-        <div class="kb">
-          <div class="cap"><b>U</b><i>parry</i></div>
-          <div class="cap"><b>I</b><i>espadazo</i></div>
-          <div class="cap"><b>O</b><i>tira escudo</i></div>
-          <div class="cap move"><b>J</b><i>◄ mover</i></div>
-          <div class="cap"><b>K</b><i>escudo</i></div>
-          <div class="cap move"><b>L</b><i>mover ►</i></div>
-        </div>
-      </div>
+        <p class="note">Según tu <b>clase</b>: Arquero → el escudo es <b>esquive</b> y el ataque es <b>flecha</b> · Bombardero → el ataque es <b>bomba</b> (sin parry).</p>
+      </section>
+
+      <section class="panel">
+        <div class="phead">Cómo jugar</div>
+        <ul id="rules">
+          <li>Gana el primero en conectar <b>3 golpes</b> al rival.</li>
+          <li>El <b>parry</b> a tiempo regresa el golpe.</li>
+          <li><b>Tirar el escudo</b>: golpe seguro, pero te quedas sin defensa.</li>
+          <li><b>Salta</b> para esquivar flechas, escudos y bombas.</li>
+          <li>3 fallos seguidos te frenan · 2 aciertos agrandan tu espada.</li>
+          <li>En el inicio: <b>clase</b> (teclas de mover) · <b>perrito</b> (click) · <b>escenario</b> (1·2·3).</li>
+        </ul>
+      </section>
     </div>
-    <div id="rules">Gana el primero en conectar <b>3 espadazos</b>. Tira el escudo = golpe seguro pero quedas sin defensa · el <b>parry</b> a tiempo regresa el golpe · 3 fallos seguidos te frenan · 2 aciertos agrandan tu espada.<br><b>Clases:</b> en la pantalla de inicio cada quien elige <b>Gladiador</b>, <b>Arquero</b> o <b>Bombardero</b> con sus teclas de mover; los botones de escudo y parry cambian de función según la clase. Cambia el <b>escenario</b> con <b>1 / 2 / 3</b>.<br><b>Salta</b> con <b>C</b> (Rojo) / <b>N</b> (Azul) para esquivar flechas, escudos lanzados y bombas.</div>
     <div id="sig">Diseñado, ideado y en parte programado por <b>8-bits</b></div>
   </div>
 
