@@ -201,7 +201,7 @@
 
   // ---------- Audio ----------
   const SND = {};
-  ['swing','hit','block','victory'].forEach(n => {
+  ['swing','hit','block','victory','ladrido'].forEach(n => {
     const a = new Audio('sonidos/' + n + '.mp3'); a.preload = 'auto'; SND[n] = a;
   });
   const ambient = new Audio('sonidos/ambient.mp3');
@@ -424,7 +424,9 @@
     const d = (f === p1) ? dogL : dogR;
     const t = performance.now();
     d.msg = '¡GUAU!'; d.msgUntil = t + 1800; d.nextAt = t + 3200; d.barkT = t + 600;
-    woof();
+    const lad = SND.ladrido;
+    if (lad && lad.readyState >= 2) sfx('ladrido', 0.9);   // usa sonidos/ladrido.mp3
+    else woof();                                            // respaldo sintético si el archivo no está
   }
   function tryAttack(f) {
     if (f.cooldown > 0 || f.parry > 0 || f.attack > 0 || f.jumpY > 0) return;
