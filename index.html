@@ -113,7 +113,7 @@
         </div>
       </div>
     </div>
-    <div id="rules">Gana el primero en conectar <b>3 espadazos</b>. Tira el escudo = golpe seguro pero quedas sin defensa · el <b>parry</b> a tiempo regresa el golpe · 3 fallos seguidos te frenan · 2 aciertos agrandan tu espada.<br><b>Clases:</b> en la pantalla de inicio cada quien elige <b>Gladiador</b>, <b>Arquero</b> o <b>Bombardero</b> con sus teclas de mover; los botones de escudo y parry cambian de función según la clase. Cambia el <b>escenario</b> con <b>1 / 2 / 3</b>.</div>
+    <div id="rules">Gana el primero en conectar <b>3 espadazos</b>. Tira el escudo = golpe seguro pero quedas sin defensa · el <b>parry</b> a tiempo regresa el golpe · 3 fallos seguidos te frenan · 2 aciertos agrandan tu espada.<br><b>Clases:</b> en la pantalla de inicio cada quien elige <b>Gladiador</b>, <b>Arquero</b> o <b>Bombardero</b> con sus teclas de mover; los botones de escudo y parry cambian de función según la clase. Cambia el <b>escenario</b> con <b>1 / 2 / 3</b>.<br><b>Salta</b> con <b>X</b> (Rojo) / <b>M</b> (Azul) para esquivar flechas, escudos lanzados y bombas.</div>
     <div id="sig">Diseñado, ideado y en parte programado por <b>8-bits</b></div>
   </div>
 
@@ -173,6 +173,7 @@
   const PARRY_WINDOW = 12;  // frames activos de parry
   const PARRY_CD = 26;      // recuperación tras parry
   const THROW_SPEED = 6;    // px/frame del escudo lanzado
+  const JUMP_V = 6, JUMP_GRAV = 0.45;   // impulso y gravedad del salto
 
   function makeFighter(o) {
     const cls = o.cls || 'glad';
@@ -183,7 +184,7 @@
       hasShield: CLASSES[cls].hasShield, shielding:false,
       attack:0, resolved:false, cooldown:0,
       parry:0, parryCd:0,
-      dash:0, dashCd:0, dashDir:0, invuln:0, windup:0,
+      dash:0, dashCd:0, dashDir:0, invuln:0, windup:0, jumpY:0, vy:0,
       healUsed:false, konami:0, konamiLast:0, healFlash:0,
       slowUntil:0, flash:0, knock:0, msg:'', msgT:0
     };
@@ -217,9 +218,9 @@
   let scenario = 0;
   function reset() {
     p1 = makeFighter({ name:'ROJO', pal:PAL_RED,  x:150, dir:+1, cls:selRed,
-      controls:{left:'a', right:'d', attack:'w', shield:'s', thrw:'q', parry:'e'} });
+      controls:{left:'a', right:'d', attack:'w', shield:'s', thrw:'q', parry:'e', jump:'x'} });
     p2 = makeFighter({ name:'AZUL', pal:PAL_BLUE, x:330, dir:-1, cls:selBlue,
-      controls:{left:'j', right:'l', attack:'i', shield:'k', thrw:'o', parry:'u'} });
+      controls:{left:'j', right:'l', attack:'i', shield:'k', thrw:'o', parry:'u', jump:'m'} });
     projectiles = []; blasts = [];
     state = 'ready'; winner = null;
   }
@@ -267,7 +268,7 @@
 
   // ---------- Entrada ----------
   const down = new Set();
-  const GAME_KEYS = new Set(['a','d','w','s','q','e','j','l','i','k','o','u',' ','enter']);
+  const GAME_KEYS = new Set(['a','d','w','s','q','e','j','l','i','k','o','u','x','m',' ','enter']);
   addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
     if (GAME_KEYS.has(k)) e.preventDefault();
@@ -309,6 +310,7 @@
       if (k === f.controls.thrw)   tryThrow(f);
       if (k === f.controls.parry)  tryParry(f);
       if (k === f.controls.shield) tryDodge(f);
+      if (k === f.controls.jump)   tryJump(f);
     });
   });
   addEventListener('keyup', (e) => { down.delete(e.key.toLowerCase()); });
@@ -352,7 +354,7 @@
     woof();
   }
   function tryAttack(f) {
-    if (f.cooldown > 0 || f.parry > 0 || f.attack > 0) return;
+    if (f.cooldown > 0 || f.parry > 0 || f.attack > 0 || f.jumpY > 0) return;
     const C = CLASSES[f.cls];
     if (C.attackType === 'arrow') {
       if (f.dash > 0) return;
@@ -380,6 +382,11 @@
     sfx('swing', 0.4);
     floatMsg(f, '¡ESQUIVE!');
   }
+  function tryJump(f) {
+    if (f.jumpY > 0 || f.vy !== 0 || f.attack > 0 || f.dash > 0) return;
+    f.vy = JUMP_V; f.jumpY = 0.01;
+    sfx('swing', 0.3);
+  }
   function tryThrow(f) {
     if (!CLASSES[f.cls].canThrow) return;
     if (!f.hasShield || f.attack > 0 || f.cooldown > 0) return;
@@ -390,6 +397,7 @@
   }
 
   function speedOf(f) { return (performance.now() < f.slowUntil) ? SLOW : WALK; }
+  function airborne(f) { return f.jumpY > 14; }   // suficientemente alto para esquivar
   function floatMsg(f, text) { f.msg = text; f.msgT = 70; }
 
   function registerMiss(f) {
@@ -428,7 +436,7 @@
   function explodeBomb(pr, foe) {
     const C = CLASSES[pr.owner.cls];
     shakeT = 8; sfx('hit', 0.7);
-    if (Math.abs(pr.x - foe.x) <= C.blastRadius && foe.invuln === 0) {
+    if (Math.abs(pr.x - foe.x) <= C.blastRadius && foe.invuln === 0 && !airborne(foe)) {
       const dirAway = (foe.x < pr.x) ? -1 : 1;
       if (foe.shielding) { foe.flash = 4; floatMsg(foe, 'BLOQUEO'); }   // bloquea el golpe...
       else { scoreHit(pr.owner, foe, '¡BOMBA!'); }
@@ -462,7 +470,7 @@
       if (pr.kind === 'arrow') {
         pr.x += pr.vx;
         if (Math.abs(pr.x - foe.x) <= FW/2 + 3) {
-          if (foe.invuln > 0) { /* la atraviesa */ }
+          if (foe.invuln > 0 || airborne(foe)) { /* la atraviesa o pasa por debajo */ }
           else if (foe.parry > 0) { sfx('block',0.85); floatMsg(foe,'¡PARRY!'); scoreHit(foe, pr.owner, '¡REGRESADA!'); foe.parry=0; foe.parryCd=PARRY_CD; projectiles.splice(i,1); continue; }
           else if (foe.shielding) { sfx('block',0.8); foe.flash=4; registerMiss(pr.owner); floatMsg(foe,'BLOQUEO'); projectiles.splice(i,1); continue; }
           else { sfx('hit',0.8); scoreHit(pr.owner, foe, '¡FLECHAZO!'); projectiles.splice(i,1); continue; }
@@ -480,8 +488,7 @@
 
       // kind === 'shield' (escudo lanzado)
       pr.x += pr.dir * THROW_SPEED; pr.ang += 0.5;
-      if (Math.abs(pr.x - foe.x) <= FW/2 + 3) {
-        if (foe.invuln > 0) { projectiles.splice(i, 1); continue; }
+      if (Math.abs(pr.x - foe.x) <= FW/2 + 3 && !(foe.invuln > 0 || airborne(foe))) {
         sfx('hit', 0.85); scoreHit(pr.owner, foe, '¡ESCUDAZO!');
         projectiles.splice(i, 1); continue;
       }
@@ -511,6 +518,10 @@
       }
       if (f.invuln > 0) f.invuln--;
       if (f.dashCd > 0) f.dashCd--;
+      if (f.vy !== 0 || f.jumpY > 0) {           // física del salto
+        f.jumpY += f.vy; f.vy -= JUMP_GRAV;
+        if (f.jumpY <= 0) { f.jumpY = 0; f.vy = 0; }
+      }
 
       if (f.attack > 0) {
         f.attack--;
@@ -700,10 +711,10 @@
     ctx.fillStyle = '#ff7a2a'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r*0.6*grow, 0, Math.PI*2); ctx.fill();
     ctx.globalAlpha = 1;
   }
-  function drawShield(f, cx, frontX) {
+  function drawShield(f, cx, frontX, fy) {
     if (!f.hasShield) return;
     const sx = f.shielding ? frontX + f.dir*3 : cx - f.dir*4;
-    const sy = f.shielding ? GROUND_Y - 40 : GROUND_Y - 34;
+    const sy = f.shielding ? fy - 40 : fy - 34;
     const sw = 7, sh = 22;
     const left = f.dir > 0 ? sx : sx - sw;
     px(left, sy, sw, sh, f.pal.metalD);
@@ -712,7 +723,7 @@
   }
 
   function drawFighter(f) {
-    const cx = Math.round(f.x), fy = GROUND_Y;
+    const cx = Math.round(f.x), fy = GROUND_Y - Math.round(f.jumpY);
     const tint = f.flash > 0 && (f.flash % 2 === 0);
     const healTint = f.healFlash > 0 && (f.healFlash % 4 < 2);   // destello verde de curación
     const C = f.pal;
@@ -721,9 +732,10 @@
     const main  = healTint ? '#3fd06a' : tint ? '#fff' : C.main;
     const metal = healTint ? '#9cffb0' : tint ? '#fff' : C.metal;
 
-    // sombra de contacto (más marcada para que no "floten")
-    ctx.fillStyle = 'rgba(0,0,0,0.32)';
-    ctx.beginPath(); ctx.ellipse(cx, fy, 13, 3.5, 0, 0, Math.PI*2); ctx.fill();
+    // sombra de contacto en el piso (se achica y aclara al saltar)
+    const shf = 1 - Math.min(f.jumpY, 45) / 64;
+    ctx.fillStyle = 'rgba(0,0,0,' + (0.32 * shf).toFixed(3) + ')';
+    ctx.beginPath(); ctx.ellipse(cx, GROUND_Y, 13 * shf, 3.5 * shf, 0, 0, Math.PI*2); ctx.fill();
 
     // piernas plantadas + sandalias sobre el piso
     px(cx - 7, fy - 18, 6, 16, '#caa478');     // pierna trasera
@@ -752,7 +764,7 @@
 
     // brazo trasero + escudo
     const frontX = cx + f.dir * 11;
-    drawShield(f, cx, frontX);
+    drawShield(f, cx, frontX, fy);
 
     // brazo delantero + espada
     const shoulderY = fy - 44;
@@ -973,7 +985,7 @@
     ctx.textAlign = 'center';
     ctx.fillStyle = '#e8c66a'; ctx.font = 'bold 21px "Courier New", monospace'; ctx.fillText('⚔ GLADIADORES ⚔', W/2, 40);
     ctx.fillStyle = '#c9b48a'; ctx.font = '8px "Courier New", monospace';
-    ctx.fillText('clase: teclas de mover  ·  perrito: click', W/2, 52);
+    ctx.fillText('clase: mover  ·  perrito: click  ·  salta: X / M', W/2, 52);
     ctx.fillStyle = '#e8c66a'; ctx.font = 'bold 8px "Courier New", monospace';
     ctx.fillText('escenario (1·2·3):  ‹ ' + SCENARIOS[scenario] + ' ›', W/2, 63);
 
