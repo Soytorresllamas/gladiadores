@@ -41,15 +41,15 @@
   #wrap { text-align: center; }
   #muteBtn {
     position: fixed; top: 12px; right: 14px; z-index: 20;
-    font-family: "Courier New", monospace; font-size: 12px; font-weight: bold;
-    color: #f4e4c1; background: linear-gradient(180deg, #34250f, #221805);
-    border: 1px solid #6b4a17; border-radius: 7px; padding: 7px 12px 8px;
-    box-shadow: 0 2px 0 #130d04; cursor: pointer; letter-spacing: .5px;
-    transition: transform .07s ease, box-shadow .07s ease, color .15s ease;
+    font-size: 17px; line-height: 1;
+    background: linear-gradient(180deg, #34250f, #221805);
+    border: 1px solid #6b4a17; border-radius: 8px; padding: 6px 8px;
+    box-shadow: 0 2px 0 #130d04; cursor: pointer;
+    transition: transform .07s ease, box-shadow .07s ease, opacity .15s ease;
   }
   #muteBtn:hover { transform: translateY(1px); box-shadow: 0 1px 0 #130d04; }
   #muteBtn:active { transform: translateY(2px); box-shadow: none; }
-  #muteBtn.off { color: #9c855c; border-color: #5a3f15; }
+  #muteBtn.off { opacity: .6; border-color: #5a3f15; }
   canvas {
     image-rendering: auto;
     width: min(96vw, 960px);
@@ -146,7 +146,7 @@
 </head>
 <body>
   <div id="wrap">
-    <button id="muteBtn" type="button">🔊 Sonido</button>
+    <button id="muteBtn" type="button" title="Sonido on/off · tecla M">🔊</button>
     <h1>⚔ GLADIADORES ⚔</h1>
     <div id="stage">
       <canvas id="game" width="480" height="270"></canvas>
@@ -248,7 +248,7 @@
   // ----- Botón de sonido (prender/apagar) -----
   const muteBtn = document.getElementById('muteBtn');
   function renderMute() {
-    muteBtn.textContent = muted ? '🔇 Silencio' : '🔊 Sonido';
+    muteBtn.textContent = muted ? '🔇' : '🔊';
     muteBtn.classList.toggle('off', muted);
   }
   function toggleMute() {
@@ -379,6 +379,7 @@
     if (GAME_KEYS.has(k)) e.preventDefault();
     unlockAudio();
     if (e.repeat) return;
+    if (k === 'm') { toggleMute(); return; }   // atajo: silenciar
     // easter egg: aprieta "8" tres veces
     if (k === '8') {
       const now = performance.now();
