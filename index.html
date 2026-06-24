@@ -39,6 +39,17 @@
     text-shadow: 2px 2px 0 #5a3a0a;
   }
   #wrap { text-align: center; }
+  #muteBtn {
+    position: fixed; top: 12px; right: 14px; z-index: 20;
+    font-family: "Courier New", monospace; font-size: 12px; font-weight: bold;
+    color: #f4e4c1; background: linear-gradient(180deg, #34250f, #221805);
+    border: 1px solid #6b4a17; border-radius: 7px; padding: 7px 12px 8px;
+    box-shadow: 0 2px 0 #130d04; cursor: pointer; letter-spacing: .5px;
+    transition: transform .07s ease, box-shadow .07s ease, color .15s ease;
+  }
+  #muteBtn:hover { transform: translateY(1px); box-shadow: 0 1px 0 #130d04; }
+  #muteBtn:active { transform: translateY(2px); box-shadow: none; }
+  #muteBtn.off { color: #9c855c; border-color: #5a3f15; }
   canvas {
     image-rendering: auto;
     width: min(96vw, 960px);
@@ -135,6 +146,7 @@
 </head>
 <body>
   <div id="wrap">
+    <button id="muteBtn" type="button">🔊 Sonido</button>
     <h1>⚔ GLADIADORES ⚔</h1>
     <div id="stage">
       <canvas id="game" width="480" height="270"></canvas>
@@ -200,6 +212,8 @@
   const bubbleEl = { L: document.getElementById('bubbleL'), R: document.getElementById('bubbleR') };
 
   // ---------- Audio ----------
+  let muted = false;
+  try { muted = localStorage.getItem('glad_muted') === '1'; } catch (e) {}
   const SND = {};
   ['swing','hit','block','victory','ladrido'].forEach(n => {
     const a = new Audio('sonidos/' + n + '.mp3'); a.preload = 'auto'; SND[n] = a;
@@ -207,12 +221,14 @@
   const ambient = new Audio('sonidos/ambient.mp3');
   ambient.loop = true; ambient.volume = 0.22; ambient.preload = 'auto';
   let audioUnlocked = false;
-  function unlockAudio() { if (audioUnlocked) return; audioUnlocked = true; ambient.play().catch(()=>{}); }
+  function unlockAudio() { if (audioUnlocked) return; audioUnlocked = true; if (!muted) ambient.play().catch(()=>{}); }
   function sfx(name, vol = 0.7) {
+    if (muted) return;
     try { const a = SND[name].cloneNode(true); a.volume = vol; a.play().catch(()=>{}); } catch (e) {}
   }
   let actx = null;
   function woof() {                                  // ladrido sintetizado (sin archivos)
+    if (muted) return;
     try {
       actx = actx || new (window.AudioContext || window.webkitAudioContext)();
       if (actx.state === 'suspended') actx.resume();
@@ -228,6 +244,22 @@
       });
     } catch (e) {}
   }
+
+  // ----- Botón de sonido (prender/apagar) -----
+  const muteBtn = document.getElementById('muteBtn');
+  function renderMute() {
+    muteBtn.textContent = muted ? '🔇 Silencio' : '🔊 Sonido';
+    muteBtn.classList.toggle('off', muted);
+  }
+  function toggleMute() {
+    muted = !muted;
+    try { localStorage.setItem('glad_muted', muted ? '1' : '0'); } catch (e) {}
+    if (muted) ambient.pause();
+    else { audioUnlocked = true; ambient.play().catch(()=>{}); }
+    renderMute();
+  }
+  muteBtn.addEventListener('click', toggleMute);
+  renderMute();
 
   // ---------- Constantes ----------
   const GROUND_Y = 206;     // línea de pies de los gladiadores
